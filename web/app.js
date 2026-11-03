@@ -1183,3 +1183,505 @@ window.onload = function () {
     switchTab(hash);
   }
 };
+
+// -------------------------------------------------------------------
+// 12. GOOGLE SPREADSHEETS & CSV / XLS IMPORT & EXPORT ENGINE
+// -------------------------------------------------------------------
+let currentSheetsModalMode = 'itinerary'; // 'itinerary' | 'expenses'
+let parsedImportData = null; // Holds parsed nodes or expenses array
+
+function openSheetsModal(mode = 'itinerary') {
+  currentSheetsModalMode = mode;
+  const modal = document.getElementById('sheetsModal');
+  const badge = document.getElementById('sheetsModalModeBadge');
+  const applyBtn = document.getElementById('sheetsApplyBtnText');
+
+  if (mode === 'itinerary') {
+    badge.textContent = 'Itinerary Stops Mode';
+    badge.className = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-sky-100 text-sky-800';
+    applyBtn.textContent = 'Apply Itinerary to Timeline';
+  } else {
+    badge.textContent = 'Group Expenses Mode';
+    badge.className = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800';
+    applyBtn.textContent = 'Apply Expenses to Ledger';
+  }
+
+  // Reset inputs and preview
+  document.getElementById('sheetsUrlInput').value = '';
+  document.getElementById('csvFileInput').value = '';
+  document.getElementById('csvPasteArea').value = '';
+  document.getElementById('sheetsPreviewContainer').classList.add('hidden');
+  parsedImportData = null;
+
+  switchSheetsModalTab('gsheet');
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+}
+
+function closeSheetsModal() {
+  const modal = document.getElementById('sheetsModal');
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+}
+
+function switchSheetsModalTab(tabId) {
+  const tabs = ['gsheet', 'upload', 'download'];
+  tabs.forEach(t => {
+    const btn = document.getElementById(`modalTabBtn-${t}`);
+    const subtab = document.getElementById(`modalSubtab-${t}`);
+    if (t === tabId) {
+      btn.className = 'px-4 py-2 text-xs font-semibold border-b-2 border-emerald-600 text-emerald-700 flex items-center gap-2';
+      subtab.classList.remove('hidden');
+    } else {
+      btn.className = 'px-4 py-2 text-xs font-semibold border-b-2 border-transparent text-slate-600 hover:text-slate-900 flex items-center gap-2';
+      subtab.classList.add('hidden');
+    }
+  });
+}
+
+// Convert Google Sheets share link to direct CSV export URL
+function googleSheetsUrlToExportUrl(url) {
+  const trimmed = url.trim();
+  if (!trimmed.includes('docs.google.com/spreadsheets')) {
+    return trimmed;
+  }
+  const match = trimmed.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  if (!match) return trimmed;
+  const sheetId = match[1];
+
+  let gid = '';
+  const gidMatch = trimmed.match(/[?&#]gid=(\d+)/);
+  if (gidMatch) {
+    gid = `&gid=${gidMatch[1]}`;
+  }
+  return `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv${gid}`;
+}
+
+// Flexible CSV / TSV string parser with delimiter detection and quote support
+function parseCSVString(content) {
+  if (!content || !content.trim()) return [];
+  const lines = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim().length > 0);
+  if (lines.length === 0) return [];
+
+  // Detect delimiter: tab > semicolon > comma
+  const firstLine = lines[0];
+  let delimiter = ',';
+  if (firstLine.includes('\t')) {
+    delimiter = '\t';
+  } else if ((firstLine.match(/;/g) || []).length > (firstLine.match(/,/g) || []).length) {
+    delimiter = ';';
+  }
+
+  // Regex-based cell parser handling quotes
+  const parseLine = (line) => {
+    const row = [];
+    let insideQuote = false;
+    let entry = '';
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        if (insideQuote && line[i + 1] === '"') {
+          entry += '"';
+          i++;
+        } else {
+          insideQuote = !insideQuote;
+        }
+      } else if (char === delimiter && !insideQuote) {
+        row.push(entry.trim());
+        entry = '';
+      } else {
+        entry += char;
+      }
+    }
+    row.push(entry.trim());
+    return row;
+  };
+
+  return lines.map(parseLine);
+}
+
+// Fetch Google Sheet live CSV
+async function fetchGoogleSheet() {
+  const url = document.getElementById('sheetsUrlInput').value.trim();
+  if (!url) {
+    showToast('Please enter a Google Spreadsheet URL');
+    return;
+  }
+
+  const exportUrl = googleSheetsUrlToExportUrl(url);
+  showToast('Fetching spreadsheet CSV...');
+
+  try {
+    const response = await fetch(exportUrl);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} - make sure sheet is shared as "Anyone with the link can view"`);
+    }
+    const csvText = await response.text();
+    processRawCSVContent(csvText);
+    showToast('Google Sheet fetched and parsed successfully!');
+  } catch (err) {
+    console.warn('Direct fetch failed, likely CORS restriction or private link:', err);
+    alert('Could not fetch the Google Sheet directly from the browser due to Google sharing permissions or CORS.\n\nQuick Solutions:\n1. In Google Sheets, make sure File → Share is set to "Anyone with the link can view".\n2. Or download the CSV (File → Download → CSV) and upload/paste it in the "Upload File or Paste" tab!');
+  }
+}
+
+// File input handler
+function handleCSVFileUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const text = e.target.result;
+    processRawCSVContent(text);
+    showToast(`Loaded ${file.name} successfully!`);
+  };
+  reader.readAsText(file);
+}
+
+// Textarea paste handler
+function handlePastedCSV() {
+  const text = document.getElementById('csvPasteArea').value;
+  if (!text.trim()) {
+    showToast('Please paste CSV or spreadsheet rows first');
+    return;
+  }
+  processRawCSVContent(text);
+  showToast('Pasted table data parsed successfully!');
+}
+
+// Sample Google Sheet CSV loader for quick testing
+function loadSampleGoogleSheet(sampleType) {
+  let csvText = '';
+  if (sampleType === 'rome_itinerary') {
+    currentSheetsModalMode = 'itinerary';
+    document.getElementById('sheetsModalModeBadge').textContent = 'Itinerary Stops Mode';
+    document.getElementById('sheetsModalModeBadge').className = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-sky-100 text-sky-800';
+    csvText = `Title,Type,Transit Min,Duration Min,Start Time,Priority,Official Domain,Notes\n` +
+      `Flight WMI → FCO (Ryanair 9941),fixed,0,145,08:00,10,ryanair.com,Gate closes 30m prior.\n` +
+      `Leonardo Express (FCO Airport → Termini),flexible,25,32,,9,trenitalia.com,Airport high-speed shuttle.\n` +
+      `Hotel Bag Drop & Trastevere Lunch,flexible,18,65,,4,maps.google.com,Flexible pasta lunch.\n` +
+      `Colosseum Arena & Timed Entry (HARD LOCK),fixed,22,120,15:30,10,ticketing.colosseo.it,Strict entry window.\n` +
+      `Frecciarossa 9548 Rail to Florence,fixed,25,95,18:50,10,trenitalia.com,Coach 4 Seats 12A-D.`;
+  } else {
+    currentSheetsModalMode = 'expenses';
+    document.getElementById('sheetsModalModeBadge').textContent = 'Group Expenses Mode';
+    document.getElementById('sheetsModalModeBadge').className = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800';
+    csvText = `Title,Payer,Amount,Currency,Exchange Rate to Base,Participants\n` +
+      `Ryanair Flights 4 Pax,Franek,340.00,EUR,1.0,Franek; Anna; Marek; Kasia\n` +
+      `Colosseum Tickets,Anna,96.00,EUR,1.0,Franek; Anna; Marek; Kasia\n` +
+      `High-Speed Rail Florence,Marek,90.00,EUR,1.0,Marek; Kasia\n` +
+      `Tuscany Rental Car,Franek,160.00,EUR,1.0,Franek; Anna\n` +
+      `Airport Parking Modlin,Kasia,258.00,PLN,4.30,Franek; Anna; Marek; Kasia`;
+  }
+  document.getElementById('csvPasteArea').value = csvText;
+  switchSheetsModalTab('upload');
+  processRawCSVContent(csvText);
+}
+
+// Master CSV processor and preview renderer
+function processRawCSVContent(csvText) {
+  const rows = parseCSVString(csvText);
+  if (rows.length < 2) {
+    showToast('CSV must contain a header row and at least 1 data row');
+    return;
+  }
+
+  const rawHeaders = rows[0];
+  const cleanHeaders = rawHeaders.map(h => h.toLowerCase().replace(/[^a-z0-9]/g, ''));
+  const dataRows = rows.slice(1);
+
+  const findCol = (...aliases) => {
+    for (const a of aliases) {
+      const norm = a.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const idx = cleanHeaders.findIndex(h => h === norm || h.includes(norm) || norm.includes(h));
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  };
+
+  const previewHead = document.getElementById('sheetsPreviewTableHead');
+  const previewBody = document.getElementById('sheetsPreviewTableBody');
+  const previewContainer = document.getElementById('sheetsPreviewContainer');
+  const rowCountBadge = document.getElementById('sheetsPreviewRowCount');
+
+  if (currentSheetsModalMode === 'itinerary') {
+    const colTitle = findCol('title', 'name', 'event', 'stop', 'activity');
+    const colType = findCol('type', 'nodetype', 'kind', 'fixed');
+    const colTransit = findCol('transitmin', 'transit', 'travel', 'travelmin');
+    const colDuration = findCol('durationmin', 'duration', 'length', 'minutes');
+    const colTime = findCol('fixedstarttime', 'starttime', 'time', 'slot', 'departure');
+    const colPrio = findCol('priority', 'prio', 'score');
+    const colDomain = findCol('officialdomain', 'domain', 'website', 'url', 'link');
+    const colNotes = findCol('notes', 'note', 'desc', 'details');
+
+    parsedImportData = dataRows.map((r, i) => {
+      const title = (colTitle !== -1 && r[colTitle]) ? r[colTitle] : `Stop ${i + 1}`;
+      const rawType = (colType !== -1 && r[colType]) ? r[colType].toLowerCase() : '';
+      const isFixed = rawType.includes('fix') || rawType.includes('lock') || rawType.includes('strict');
+      const transitMin = (colTransit !== -1 && r[colTransit]) ? parseInt(r[colTransit], 10) || 0 : (i === 0 ? 0 : 15);
+      const durationMin = (colDuration !== -1 && r[colDuration]) ? parseInt(r[colDuration], 10) || 45 : 45;
+      const rawTime = (colTime !== -1 && r[colTime]) ? r[colTime] : null;
+
+      let fixedStartMin = null;
+      if (rawTime) {
+        const m = rawTime.match(/(\d{1,2}):(\d{2})/);
+        if (m) {
+          fixedStartMin = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+        }
+      }
+
+      const priority = (colPrio !== -1 && r[colPrio]) ? Math.max(1, Math.min(10, parseInt(r[colPrio], 10) || 5)) : 5;
+      const domain = (colDomain !== -1 && r[colDomain]) ? r[colDomain] : null;
+      const notes = (colNotes !== -1 && r[colNotes]) ? r[colNotes] : '';
+
+      return {
+        id: `csv-${Date.now()}-${i}`,
+        title: title,
+        type: (isFixed || fixedStartMin !== null) ? 'fixed' : 'flexible',
+        category: title.toLowerCase().includes('flight') ? 'flight' : (title.toLowerCase().includes('train') ? 'rail' : (title.toLowerCase().includes('lunch') || title.toLowerCase().includes('dinner') ? 'food' : 'sightseeing')),
+        icon: title.toLowerCase().includes('flight') ? 'fa-plane' : (title.toLowerCase().includes('train') ? 'fa-train' : (title.toLowerCase().includes('lunch') || title.toLowerCase().includes('dinner') ? 'fa-utensils' : 'fa-landmark')),
+        transitMin: transitMin,
+        transitMode: title.toLowerCase().includes('flight') ? 'flight' : (title.toLowerCase().includes('train') ? 'train' : 'walk'),
+        durationMin: durationMin,
+        minDurationMin: Math.max(10, Math.floor(durationMin * 0.4)),
+        fixedStartMin: fixedStartMin,
+        priority: priority,
+        officialDomain: domain,
+        active: true,
+        notes: notes
+      };
+    });
+
+    previewHead.innerHTML = `
+      <tr>
+        <th class="py-2 px-3">Title</th>
+        <th class="py-2 px-3">Type</th>
+        <th class="py-2 px-3">Transit</th>
+        <th class="py-2 px-3">Duration</th>
+        <th class="py-2 px-3">Start Time</th>
+        <th class="py-2 px-3">Official Domain</th>
+      </tr>
+    `;
+    previewBody.innerHTML = parsedImportData.map(node => `
+      <tr class="hover:bg-slate-100/50">
+        <td class="py-1.5 px-3 font-semibold text-slate-800">${node.title}</td>
+        <td class="py-1.5 px-3">${node.type === 'fixed' ? '<span class="text-blue-700 font-bold">FIXED</span>' : '<span class="text-slate-500">FLEXIBLE</span>'}</td>
+        <td class="py-1.5 px-3">${node.transitMin}m</td>
+        <td class="py-1.5 px-3">${node.durationMin}m</td>
+        <td class="py-1.5 px-3 font-mono">${node.fixedStartMin !== null ? formatMinToTime(node.fixedStartMin) : '—'}</td>
+        <td class="py-1.5 px-3 text-emerald-700 font-mono">${node.officialDomain || '—'}</td>
+      </tr>
+    `).join('');
+
+  } else {
+    // Group Expenses mode
+    const colTitle = findCol('title', 'item', 'description', 'expense', 'name');
+    const colPayer = findCol('payer', 'paidby', 'who', 'person');
+    const colAmount = findCol('amount', 'cost', 'price', 'val', 'sum');
+    const colCurrency = findCol('currency', 'curr');
+    const colRate = findCol('rate', 'exchangerate', 'exchangerateto_base', 'fx');
+    const colParts = findCol('participants', 'splitbetween', 'split', 'travelers', 'for');
+
+    parsedImportData = dataRows.map((r, i) => {
+      const title = (colTitle !== -1 && r[colTitle]) ? r[colTitle] : `Expense ${i + 1}`;
+      const payer = (colPayer !== -1 && r[colPayer]) ? r[colPayer].trim() : 'Franek';
+      const rawAmt = (colAmount !== -1 && r[colAmount]) ? r[colAmount].replace(/[^0-9.]/g, '') : '10';
+      const amount = parseFloat(rawAmt) || 10;
+      const currency = (colCurrency !== -1 && r[colCurrency]) ? r[colCurrency].toUpperCase().trim() : 'EUR';
+      const rawRate = (colRate !== -1 && r[colRate]) ? r[colRate].replace(',', '.') : '';
+      const rate = parseFloat(rawRate) || (currency === 'PLN' ? 4.30 : 1.0);
+      const rawParts = (colParts !== -1 && r[colParts]) ? r[colParts] : '';
+      const parts = rawParts ? rawParts.split(/[,;/]/).map(p => p.trim()).filter(Boolean) : [payer];
+
+      return {
+        id: `exp-${Date.now()}-${i}`,
+        title: title,
+        payer: payer,
+        amount: amount,
+        currency: currency,
+        exchangeRate: rate,
+        participants: parts.length > 0 ? parts : [payer]
+      };
+    });
+
+    previewHead.innerHTML = `
+      <tr>
+        <th class="py-2 px-3">Expense</th>
+        <th class="py-2 px-3">Paid By</th>
+        <th class="py-2 px-3">Amount</th>
+        <th class="py-2 px-3">Split Between</th>
+      </tr>
+    `;
+    previewBody.innerHTML = parsedImportData.map(exp => `
+      <tr class="hover:bg-slate-100/50">
+        <td class="py-1.5 px-3 font-semibold text-slate-800">${exp.title}</td>
+        <td class="py-1.5 px-3 text-sky-700 font-semibold">${exp.payer}</td>
+        <td class="py-1.5 px-3 font-bold text-emerald-700">${exp.amount.toFixed(2)} ${exp.currency}</td>
+        <td class="py-1.5 px-3 text-slate-600">${exp.participants.join(', ')}</td>
+      </tr>
+    `).join('');
+  }
+
+  rowCountBadge.textContent = `${parsedImportData.length} rows parsed`;
+  previewContainer.classList.remove('hidden');
+}
+
+// Apply parsed import data to active state
+function applySheetsImport() {
+  if (!parsedImportData || parsedImportData.length === 0) {
+    showToast('No data to apply');
+    return;
+  }
+
+  if (currentSheetsModalMode === 'itinerary') {
+    activeNodes = parsedImportData;
+    updateDagMath();
+    showToast(`✓ Applied ${activeNodes.length} itinerary stops to timeline!`);
+  } else {
+    ledgerExpenses = parsedImportData;
+    // Add any newly discovered travelers to the global list if not already present
+    parsedImportData.forEach(exp => {
+      if (!travelers.includes(exp.payer)) travelers.push(exp.payer);
+      exp.participants.forEach(p => {
+        if (!travelers.includes(p)) travelers.push(p);
+      });
+    });
+    renderLedger();
+    showToast(`✓ Applied ${ledgerExpenses.length} expense items to ledger!`);
+  }
+
+  closeSheetsModal();
+}
+
+// Direct CSV Exporters
+function triggerFileDownload(content, filename) {
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast(`Downloaded ${filename}!`);
+}
+
+function exportItineraryCSV() {
+  const headers = ['ID', 'Title', 'Type', 'Category', 'Transit Mode', 'Transit Min', 'Duration Min', 'Fixed Start Time', 'Priority', 'Official Domain', 'PNR', 'Notes'];
+  const rows = activeNodes.map(n => [
+    n.id,
+    `"${(n.title || '').replace(/"/g, '""')}"`,
+    n.type,
+    n.category,
+    n.transitMode || 'walk',
+    n.transitMin || 0,
+    n.durationMin || 0,
+    n.fixedStartMin !== null ? formatMinToTime(n.fixedStartMin) : '',
+    n.priority || 5,
+    `"${(n.officialDomain || '').replace(/"/g, '""')}"`,
+    `"${(n.pnr || '').replace(/"/g, '""')}"`,
+    `"${(n.notes || '').replace(/"/g, '""')}"`
+  ]);
+
+  const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  triggerFileDownload(csv, 'kronolatch-itinerary.csv');
+}
+
+function exportExpensesCSV() {
+  const headers = ['ID', 'Title', 'Payer', 'Amount', 'Currency', 'Exchange Rate to Base', 'Participants', 'Linked Node ID'];
+  const rows = ledgerExpenses.map(e => [
+    e.id,
+    `"${(e.title || '').replace(/"/g, '""')}"`,
+    `"${(e.payer || '').replace(/"/g, '""')}"`,
+    (e.amount || 0).toFixed(2),
+    e.currency || 'EUR',
+    (e.currency === 'PLN' ? (1 / EUR_TO_PLN).toFixed(4) : '1.0000'),
+    `"${(e.participants || []).join('; ')}"`,
+    e.nodeId || ''
+  ]);
+
+  const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  triggerFileDownload(csv, 'kronolatch-expenses.csv');
+}
+
+function exportSettlementCSV() {
+  // Compute net balances & transfers in memory
+  const balances = {};
+  travelers.forEach(t => balances[t] = 0);
+
+  ledgerExpenses.forEach(exp => {
+    const costEur = exp.currency === 'PLN' ? (exp.amount / EUR_TO_PLN) : exp.amount;
+    const splitCount = (exp.participants && exp.participants.length > 0) ? exp.participants.length : 1;
+    const share = costEur / splitCount;
+
+    balances[exp.payer] = (balances[exp.payer] || 0) + costEur;
+    exp.participants.forEach(p => {
+      balances[p] = (balances[p] || 0) - share;
+    });
+  });
+
+  const creditors = [];
+  const debtors = [];
+  Object.keys(balances).forEach(person => {
+    const net = Math.round(balances[person] * 100) / 100;
+    if (net > 0.01) creditors.push({ person, amount: net });
+    else if (net < -0.01) debtors.push({ person, amount: -net });
+  });
+
+  creditors.sort((a, b) => b.amount - a.amount);
+  debtors.sort((a, b) => b.amount - a.amount);
+
+  const transfers = [];
+  let cIdx = 0;
+  let dIdx = 0;
+
+  while (cIdx < creditors.length && dIdx < debtors.length) {
+    const creditor = creditors[cIdx];
+    const debtor = debtors[dIdx];
+    const settled = Math.min(creditor.amount, debtor.amount);
+
+    if (settled > 0.01) {
+      transfers.push({
+        from: debtor.person,
+        to: creditor.person,
+        amountEur: settled,
+        amountPln: settled * EUR_TO_PLN
+      });
+    }
+
+    creditor.amount -= settled;
+    debtor.amount -= settled;
+
+    if (creditor.amount < 0.01) cIdx++;
+    if (debtor.amount < 0.01) dIdx++;
+  }
+
+  const headers = ['From (Debtor)', 'To (Creditor)', 'Amount', 'Base Currency', 'Amount Alternate', 'Alternate Currency'];
+  const rows = transfers.map(t => [
+    `"${t.from}"`,
+    `"${t.to}"`,
+    t.amountEur.toFixed(2),
+    'EUR',
+    t.amountPln.toFixed(2),
+    'PLN'
+  ]);
+
+  const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  triggerFileDownload(csv, 'kronolatch-settlement.csv');
+}
+
+function downloadStarterTemplate() {
+  const headers = ['Title', 'Type', 'Transit Mode', 'Transit Min', 'Duration Min', 'Fixed Start Time', 'Priority', 'Official Domain', 'PNR', 'Notes'];
+  const sampleRows = [
+    ['Morning Flight to Destination', 'fixed', 'flight', '0', '120', '08:00', '10', 'airline.com', 'PNR-1234', 'Arrive 2h early'],
+    ['Airport Express Train', 'flexible', 'train', '20', '35', '', '8', 'rail.com', '', 'Direct airport link'],
+    ['Hotel Bag Drop & Lunch', 'flexible', 'walk', '15', '60', '', '4', '', '', 'Flexible stop'],
+    ['Timed Museum Entry (LOCK)', 'fixed', 'walk', '20', '90', '14:30', '10', 'museum.org', 'TICKET-99', 'Hard time window']
+  ];
+
+  const csv = [headers.join(','), ...sampleRows.map(r => r.map(c => `"${c}"`).join(','))].join('\n');
+  triggerFileDownload(csv, 'kronolatch-template.csv');
+}
+

@@ -135,14 +135,15 @@ Every milestone, deliverable, and specification from the original ideation conve
 | **5** | **DAG Engine** | Dynamic mode buffers, domino propagation, auto-cut optimizer | [`src/kronolatch/dag_engine.py`](file:///Users/franek/personal_workspace/kronolatch/src/kronolatch/dag_engine.py) | ✅ **100% Verified** |
 | **6** | **Vendor Verifier** | Root domain eTLD+1, Wikidata P856, Google Places, clone detection | [`src/kronolatch/verifier.py`](file:///Users/franek/personal_workspace/kronolatch/src/kronolatch/verifier.py) | ✅ **100% Verified** |
 | **7** | **Group Ledger** | Uneven subgroup cost allocations & greedy debt minimization | [`src/kronolatch/ledger.py`](file:///Users/franek/personal_workspace/kronolatch/src/kronolatch/ledger.py) | ✅ **100% Verified** |
-| **8** | **CLI Tool** | Typer CLI (`validate`, `verify-url`, `settle`, `self-test`) | [`src/kronolatch/cli.py`](file:///Users/franek/personal_workspace/kronolatch/src/kronolatch/cli.py) | ✅ **100% Verified** |
-| **9** | **Automated Tests** | `pytest` test suite covering DAG math, domain checks, ledger math | [`tests/test_*.py`](file:///Users/franek/personal_workspace/kronolatch/tests) | ✅ **11/11 Passed** |
-| **10** | **Manual AI Test Suite** | 4 On-demand manual test cases with copyable AI prompts | [`tests/manual_ai_verification.md`](file:///Users/franek/personal_workspace/kronolatch/tests/manual_ai_verification.md) | ✅ **4/4 Verified** |
-| **11** | **Client-Side Web App** | Zero-build static PWA with calm, friendly palette | [`web/`](file:///Users/franek/personal_workspace/kronolatch/web) | ✅ **100% Verified** |
-| **12** | **Sample Itinerary** | Realistic multi-modal trip (flights, train, car, museum) | [`web/sample-trip.json`](file:///Users/franek/personal_workspace/kronolatch/web/sample-trip.json) | ✅ **100% Verified** |
-| **13** | **Portable Skills** | Gemini Gems, Antigravity IDE, Cursor, and MCP integration | [`skills/`](file:///Users/franek/personal_workspace/kronolatch/skills) & [`.antigravity/`](file:///Users/franek/personal_workspace/kronolatch/.antigravity) | ✅ **100% Verified** |
-| **14** | **CI/CD Automation** | GitHub Actions workflows for tests and automated Pages deploy | [`.github/workflows/`](file:///Users/franek/personal_workspace/kronolatch/.github/workflows) | ✅ **Passing on GitHub** |
-| **15** | **Live Web Deployment** | Published public site on GitHub Pages | [https://franekjemiolo.github.io/kronolatch/](https://franekjemiolo.github.io/kronolatch/) | ✅ **Live (HTTP 200)** |
+| **8** | **CLI Tool** | Typer CLI (`validate`, `verify-url`, `settle`, `import-csv`, `export-csv`, `self-test`) | [`src/kronolatch/cli.py`](file:///Users/franek/personal_workspace/kronolatch/src/kronolatch/cli.py) | ✅ **100% Verified** |
+| **9** | **Spreadsheet Engine** | Google Sheets live sharing link parsing, flexible CSV/XLS ingestion & exports | [`src/kronolatch/sheets.py`](file:///Users/franek/personal_workspace/kronolatch/src/kronolatch/sheets.py) | ✅ **100% Verified** |
+| **10** | **Automated Tests** | `pytest` test suite covering DAG math, domain checks, ledger math, and CSV roundtrip | [`tests/test_*.py`](file:///Users/franek/personal_workspace/kronolatch/tests) | ✅ **16/16 Passed** |
+| **11** | **Manual AI Test Suite** | 4 On-demand manual test cases with copyable AI prompts | [`tests/manual_ai_verification.md`](file:///Users/franek/personal_workspace/kronolatch/tests/manual_ai_verification.md) | ✅ **4/4 Verified** |
+| **12** | **Client-Side Web App** | Zero-build static PWA with calm, friendly palette and Sheets modal | [`web/`](file:///Users/franek/personal_workspace/kronolatch/web) | ✅ **100% Verified** |
+| **13** | **Sample Itinerary** | Realistic multi-modal trip (flights, train, car, museum) | [`web/sample-trip.json`](file:///Users/franek/personal_workspace/kronolatch/web/sample-trip.json) | ✅ **100% Verified** |
+| **14** | **Portable Skills** | Gemini Gems, Antigravity IDE, Cursor, and MCP integration | [`skills/`](file:///Users/franek/personal_workspace/kronolatch/skills) & [`.antigravity/`](file:///Users/franek/personal_workspace/kronolatch/.antigravity) | ✅ **100% Verified** |
+| **15** | **CI/CD Automation** | GitHub Actions workflows for tests and automated Pages deploy | [`.github/workflows/`](file:///Users/franek/personal_workspace/kronolatch/.github/workflows) | ✅ **Passing on GitHub** |
+| **16** | **Live Web Deployment** | Published public site on GitHub Pages | [https://franekjemiolo.github.io/kronolatch/](https://franekjemiolo.github.io/kronolatch/) | ✅ **Live (HTTP 200)** |
 
 ---
 

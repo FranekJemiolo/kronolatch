@@ -78,7 +78,7 @@ KronoLatch is managed with [`uv`](https://github.com/astral-sh/uv).
 git clone https://github.com/FranekJemiolo/kronolatch.git
 cd kronolatch
 
-# Run automated unit tests (11/11 passing)
+# Run automated unit tests (16/16 passing)
 uv run pytest
 
 # Run on-demand architectural self-test suite (4/4 passing)
@@ -86,6 +86,21 @@ uv run kronolatch self-test
 ```
 
 ### 2. CLI Usage Examples
+
+#### Google Spreadsheets & CSV / XLS Import & Export
+```bash
+# Export itinerary, expenses, and debt settlement to standard CSV files
+uv run kronolatch export-csv --out-dir ./exports
+
+# Export specific table directly to stdout (useful for pipes & clipboard)
+uv run kronolatch export-csv --stdout --type settlement
+
+# Import directly from a public Google Spreadsheet sharing URL
+uv run kronolatch import-csv "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit?usp=sharing"
+
+# Import from a local CSV file into a new trip JSON
+uv run kronolatch import-csv ./my-stops.csv --type itinerary --out ./my-trip.json
+```
 
 #### Audit Itinerary & Simulate Delays
 ```bash

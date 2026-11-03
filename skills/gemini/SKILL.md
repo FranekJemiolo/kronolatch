@@ -60,3 +60,4 @@ Model every day of the tour as a Directed Acyclic Graph (DAG) with mathematicall
 - `/verify [venue or URL]` — Audits ticket URL against official ground truth.
 - `/schedule [destination]` — Builds an hourly execution DAG with safety cushions.
 - `/settle [expenses]` — Calculates net balances and minimal peer-to-peer transfers.
+- `/sheets [url or csv]` — Imports or exports itinerary and expense tables to/from Google Sheets / CSV.

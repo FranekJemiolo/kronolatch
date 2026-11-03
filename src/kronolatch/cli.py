@@ -12,8 +12,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
+import httpx
 import typer
 from rich.console import Console
 from rich.panel import Panel
@@ -30,6 +31,14 @@ from kronolatch.models import (
     TripDAG,
     TripNode,
     VerificationStatus,
+)
+from kronolatch.sheets import (
+    export_expenses_to_csv,
+    export_itinerary_to_csv,
+    export_settlement_to_csv,
+    google_sheets_url_to_csv_export_url,
+    parse_expenses_csv,
+    parse_itinerary_csv,
 )
 from kronolatch.verifier import verify_vendor_url
 
@@ -467,6 +476,284 @@ You are KronoLatch, an offline-first, deterministic travel scheduling and vendor
         content = "# KronoLatch CLI Reference\nuv run kronolatch validate --inject-delay n2:35 --auto-cut\nuv run kronolatch verify-url https://www.colosseum-rome-tickets.org/fast-track -v Colosseum -p 44\nuv run kronolatch settle"
 
     console.print(content)
+
+
+@app.command(name="import-csv")
+def import_csv(
+    source: str = typer.Argument(
+        ...,
+        help="Local CSV file path or public Google Sheets URL (e.g. https://docs.google.com/spreadsheets/d/...)",
+    ),
+    data_type: str = typer.Option(
+        "auto",
+        "--type",
+        "-t",
+        help="Data type: 'auto' (detect from headers), 'itinerary', or 'expenses'",
+    ),
+    out_file: Optional[str] = typer.Option(
+        None,
+        "--out",
+        "-o",
+        help="Save result into a new trip JSON file",
+    ),
+    merge_into: Optional[str] = typer.Option(
+        None,
+        "--merge-into",
+        "-m",
+        help="Merge imported records into an existing trip JSON file",
+    ),
+):
+    """Imports itinerary stops or expenses from local CSV/XLS or a public Google Spreadsheet URL."""
+    csv_text: str = ""
+    is_url = source.startswith("http://") or source.startswith("https://")
+
+    if is_url:
+        export_url = google_sheets_url_to_csv_export_url(source)
+        console.print(f"[dim]Fetching CSV from:[/dim] [cyan]{export_url}[/cyan]")
+        try:
+            with httpx.Client(timeout=15.0, follow_redirects=True) as client:
+                resp = client.get(export_url)
+                resp.raise_for_status()
+                csv_text = resp.text
+        except Exception as e:
+            console.print(f"[bold red]Failed to fetch spreadsheet:[/bold red] {e}")
+            raise typer.Exit(code=1)
+    else:
+        path = Path(source)
+        if not path.exists():
+            console.print(f"[bold red]File not found:[/bold red] {source}")
+            raise typer.Exit(code=1)
+        try:
+            csv_text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            csv_text = path.read_text(encoding="latin-1")
+
+    # Auto-detect data type if requested
+    detected_type = data_type.lower()
+    if detected_type == "auto":
+        first_chunk = csv_text[:1000].lower()
+        if any(
+            term in first_chunk
+            for term in ["payer", "amount", "price", "split", "cost", "currency"]
+        ):
+            detected_type = "expenses"
+        else:
+            detected_type = "itinerary"
+
+    if detected_type == "expenses":
+        expenses = parse_expenses_csv(csv_text)
+        if not expenses:
+            console.print("[yellow]Warning: No valid expense rows parsed from CSV.[/yellow]")
+            return
+
+        table = Table(title=f"Imported Expenses ({len(expenses)} rows)", border_style="cyan")
+        table.add_column("ID", style="dim")
+        table.add_column("Title", style="bold white")
+        table.add_column("Payer", style="cyan")
+        table.add_column("Amount", style="bold green")
+        table.add_column("Currency", style="yellow")
+        table.add_column("Participants", style="dim")
+
+        for exp in expenses:
+            table.add_row(
+                exp.id,
+                exp.title,
+                exp.payer,
+                f"{exp.amount:.2f}",
+                exp.currency,
+                ", ".join(exp.participants),
+            )
+        console.print(table)
+
+        if merge_into:
+            m_path = Path(merge_into)
+            if m_path.exists():
+                with open(m_path, "r", encoding="utf-8") as f:
+                    trip_data = json.load(f)
+                trip = TripDAG.model_validate(trip_data)
+                trip.expenses.extend(expenses)
+                for exp in expenses:
+                    for p in exp.participants:
+                        if p not in trip.travelers:
+                            trip.travelers.append(p)
+                    if exp.payer not in trip.travelers:
+                        trip.travelers.append(exp.payer)
+                m_path.write_text(
+                    json.dumps(trip.model_dump(mode="json"), indent=2), encoding="utf-8"
+                )
+                console.print(
+                    f"[bold green]✓ Appended {len(expenses)} expenses to {merge_into}[/bold green]"
+                )
+            else:
+                console.print(f"[bold red]Merge target file not found:[/bold red] {merge_into}")
+        elif out_file:
+            all_travelers: List[str] = []
+            for exp in expenses:
+                for p in exp.participants:
+                    if p not in all_travelers:
+                        all_travelers.append(p)
+                if exp.payer not in all_travelers:
+                    all_travelers.append(exp.payer)
+            new_trip = TripDAG(
+                trip_id="imported-expenses",
+                title="Imported Group Expenses",
+                destination="Imported",
+                base_currency=expenses[0].currency if expenses else "EUR",
+                travelers=all_travelers or ["Traveler"],
+                nodes=[],
+                expenses=expenses,
+            )
+            Path(out_file).write_text(
+                json.dumps(new_trip.model_dump(mode="json"), indent=2), encoding="utf-8"
+            )
+            console.print(
+                f"[bold green]✓ Saved {len(expenses)} expenses to {out_file}[/bold green]"
+            )
+
+    else:
+        nodes = parse_itinerary_csv(csv_text)
+        if not nodes:
+            console.print("[yellow]Warning: No valid itinerary stops parsed from CSV.[/yellow]")
+            return
+
+        table = Table(title=f"Imported Itinerary Nodes ({len(nodes)} stops)", border_style="cyan")
+        table.add_column("ID", style="dim")
+        table.add_column("Title", style="bold white")
+        table.add_column("Type", style="cyan")
+        table.add_column("Mode / Category", style="dim")
+        table.add_column("Duration", style="yellow")
+        table.add_column("Start Time", style="magenta")
+        table.add_column("Domain", style="green")
+
+        for n in nodes:
+            table.add_row(
+                n.id,
+                n.title,
+                n.type.value,
+                f"{n.transit_mode.value} / {n.category.value}",
+                f"{n.duration_min}m",
+                n.fixed_start_time or "Flex",
+                n.official_domain or "—",
+            )
+        console.print(table)
+
+        if merge_into:
+            m_path = Path(merge_into)
+            if m_path.exists():
+                with open(m_path, "r", encoding="utf-8") as f:
+                    trip_data = json.load(f)
+                trip = TripDAG.model_validate(trip_data)
+                trip.nodes.extend(nodes)
+                m_path.write_text(
+                    json.dumps(trip.model_dump(mode="json"), indent=2), encoding="utf-8"
+                )
+                console.print(
+                    f"[bold green]✓ Appended {len(nodes)} nodes to {merge_into}[/bold green]"
+                )
+            else:
+                console.print(f"[bold red]Merge target file not found:[/bold red] {merge_into}")
+        elif out_file:
+            new_trip = TripDAG(
+                trip_id="imported-itinerary",
+                title="Imported Itinerary",
+                destination="Imported",
+                base_currency="EUR",
+                travelers=["Traveler"],
+                nodes=nodes,
+                expenses=[],
+            )
+            Path(out_file).write_text(
+                json.dumps(new_trip.model_dump(mode="json"), indent=2), encoding="utf-8"
+            )
+            console.print(
+                f"[bold green]✓ Saved {len(nodes)} itinerary nodes to {out_file}[/bold green]"
+            )
+
+
+@app.command(name="export-csv")
+def export_csv(
+    trip_file: Optional[str] = typer.Argument(
+        None,
+        help="Path to trip JSON file (defaults to Rome & Florence sample)",
+    ),
+    data_type: str = typer.Option(
+        "all",
+        "--type",
+        "-t",
+        help="Data type to export: 'all', 'itinerary', 'expenses', or 'settlement'",
+    ),
+    out_dir: str = typer.Option(
+        ".",
+        "--out-dir",
+        "-d",
+        help="Directory to save exported CSV file(s)",
+    ),
+    stdout: bool = typer.Option(
+        False,
+        "--stdout",
+        help="Print CSV directly to stdout instead of writing files",
+    ),
+):
+    """Exports itinerary, group expenses, and debt settlement tables to standard CSV for Google Sheets or Excel."""
+    trip = load_or_create_sample_dag(trip_file)
+    target_type = data_type.lower()
+    dest_dir = Path(out_dir)
+
+    if not stdout:
+        dest_dir.mkdir(parents=True, exist_ok=True)
+
+    exported_files = []
+
+    # Export Itinerary
+    if target_type in ["all", "itinerary"]:
+        csv_str = export_itinerary_to_csv(trip.nodes)
+        if stdout and target_type == "itinerary":
+            print(csv_str)
+            return
+        elif not stdout:
+            out_file = dest_dir / "itinerary.csv"
+            out_file.write_text(csv_str, encoding="utf-8")
+            exported_files.append((out_file, len(trip.nodes), "Itinerary stops"))
+
+    # Export Expenses
+    if target_type in ["all", "expenses"]:
+        csv_str = export_expenses_to_csv(trip.expenses)
+        if stdout and target_type == "expenses":
+            print(csv_str)
+            return
+        elif not stdout:
+            out_file = dest_dir / "expenses.csv"
+            out_file.write_text(csv_str, encoding="utf-8")
+            exported_files.append((out_file, len(trip.expenses), "Expense items"))
+
+    # Export Settlement
+    if target_type in ["all", "settlement"]:
+        settlement = settle_expenses(
+            expenses=trip.expenses,
+            base_currency=trip.base_currency,
+            all_travelers=trip.travelers,
+        )
+        csv_str = export_settlement_to_csv(settlement)
+        if stdout and target_type == "settlement":
+            print(csv_str)
+            return
+        elif not stdout:
+            out_file = dest_dir / "settlement.csv"
+            out_file.write_text(csv_str, encoding="utf-8")
+            exported_files.append((out_file, len(settlement.transfers), "Settlement transfers"))
+
+    if not stdout:
+        msg = "\n".join(
+            f"  • [bold white]{f[0]}[/bold white] ({f[1]} {f[2]})" for f in exported_files
+        )
+        console.print(
+            Panel.fit(
+                f"[bold green]✓ CSV Export Complete[/bold green]\n\n"
+                f"Generated CSV files ready for Google Sheets & Excel import:\n{msg}\n\n"
+                f"[dim]Tip: In Google Sheets, choose File → Import → Upload to load directly.[/dim]",
+                border_style="green",
+            )
+        )
 
 
 @app.command()
