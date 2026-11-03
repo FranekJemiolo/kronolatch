@@ -1,0 +1,61 @@
+[project]
+name = "kronolatch"
+version = "1.0.0"
+description = "Deterministic-first, agent-assisted trip orchestrator, anti-phishing ticket domain verifier, temporal DAG validator, and multi-currency group expense splitter"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [
+    { name = "KronoLatch Core Team" }
+]
+keywords = [
+    "travel",
+    "itinerary",
+    "dag",
+    "anti-phishing",
+    "ticket-verification",
+    "expense-splitter",
+    "agentic-ai",
+    "gemini",
+    "antigravity"
+]
+dependencies = [
+    "pydantic>=2.7.0",
+    "typer>=0.12.3",
+    "rich>=13.7.1",
+    "httpx>=0.27.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.1.0",
+    "ruff>=0.4.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.1.0",
+    "ruff>=0.4.0",
+]
+
+[project.scripts]
+kronolatch = "kronolatch.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kronolatch"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

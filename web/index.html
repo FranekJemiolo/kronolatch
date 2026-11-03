@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KronoLatch — Worry-Free Trip Orchestrator & Group Expense Splitter</title>
+  
+  <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS CDN for layout utilities -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  
+  <!-- Custom Calm & Friendly Travel Theme -->
+  <link rel="stylesheet" href="style.css" />
+  <link rel="manifest" href="manifest.json" />
+</head>
+<body>
+
+  <!-- Toast Notification -->
+  <div id="toast">
+    <div class="travel-card px-4 py-3 flex items-center gap-3 bg-white text-slate-800 border border-slate-200">
+      <i id="toast-icon" class="fa-solid fa-circle-check text-emerald-500 text-lg"></i>
+      <span id="toast-msg" class="text-sm font-medium">Copied to clipboard!</span>
+    </div>
+  </div>
+
+  <!-- Top Navigation & Header -->
+  <header class="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 transition-colors">
+    <div class="max-w-[1400px] mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
+      
+      <!-- Brand & Purpose -->
+      <div class="flex items-center gap-3">
+        <div class="w-11 h-11 rounded-2xl bg-sky-100 border border-sky-200 flex items-center justify-center text-sky-600 shadow-sm">
+          <i class="fa-solid fa-compass text-xl"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="font-bold text-xl tracking-tight text-slate-900">KronoLatch</span>
+            <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+              <i class="fa-solid fa-shield-halved mr-1 text-emerald-600"></i>Verified Travel Protection
+            </span>
+          </div>
+          <p class="text-xs text-slate-500 hidden sm:block">Worry-Free Trip DAG, Anti-Scam Ticket Checker & Group Splitter</p>
+        </div>
+      </div>
+
+      <!-- Tour Selector & Actions -->
+      <div class="flex items-center gap-2.5 flex-wrap">
+        <div class="flex items-center bg-slate-100 border border-slate-200 rounded-xl px-3 py-1.5 text-xs">
+          <span class="text-slate-500 mr-2"><i class="fa-solid fa-route text-sky-600 mr-1"></i>Tour:</span>
+          <select id="tripPresetSelect" onchange="switchTripPreset(this.value)" class="bg-transparent text-slate-800 font-semibold focus:outline-none cursor-pointer">
+            <option value="rome">Rome & Florence Express (4 Pax • Rail + Car)</option>
+            <option value="alps">Central Europe Alpine Loop (4 Pax • Vienna & Salzburg)</option>
+          </select>
+        </div>
+
+        <!-- Theme Toggle (Day / Twilight) -->
+        <button onclick="toggleTheme()" id="themeToggleBtn" title="Toggle Calm Day / Twilight Theme" class="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 text-sm transition">
+          <i class="fa-solid fa-moon"></i>
+        </button>
+
+        <!-- Quick AI Skill Button -->
+        <button onclick="switchTab('studio')" class="text-xs font-semibold px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white shadow-sm transition flex items-center gap-1.5">
+          <i class="fa-solid fa-sparkles"></i>
+          <span>Export AI Travel Skill</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 4 Main Pillar Tabs -->
+    <div class="max-w-[1400px] mx-auto px-4 sm:px-6 flex overflow-x-auto border-t border-slate-100">
+      <button onclick="switchTab('dag')" id="tab-btn-dag" class="tab-btn active">
+        <i class="fa-solid fa-calendar-check"></i>
+        <span>1. Trip Schedule & Safety Leeway</span>
+        <span id="nav-conflict-badge" class="ml-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-800">ON TIME</span>
+      </button>
+
+      <button onclick="switchTab('verifier')" id="tab-btn-verifier" class="tab-btn">
+        <i class="fa-solid fa-shield-cat"></i>
+        <span>2. Ticket Scam & Domain Checker</span>
+        <span class="ml-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-rose-100 text-rose-800">3 Scams Blocked</span>
+      </button>
+
+      <button onclick="switchTab('ledger')" id="tab-btn-ledger" class="tab-btn">
+        <i class="fa-solid fa-wallet"></i>
+        <span>3. Fair Group Expense Splitter</span>
+      </button>
+
+      <button onclick="switchTab('studio')" id="tab-btn-studio" class="tab-btn">
+        <i class="fa-solid fa-laptop-code"></i>
+        <span>4. AI Assistant & Verification Studio</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Body Container -->
+  <main class="flex-1 max-w-[1400px] w-full mx-auto px-4 sm:px-6 py-6">
+
+    <!-- Telemetry Summary Cards Strip -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      
+      <div class="travel-card p-4 flex items-center justify-between">
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Sightseeing & Tours</p>
+          <p id="kpi-sightseeing" class="text-2xl font-bold text-slate-900 mt-1">5h 45m</p>
+          <p class="text-xs text-emerald-700 font-medium mt-0.5">Core vacation enjoyment</p>
+        </div>
+        <div class="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 text-xl">
+          <i class="fa-solid fa-camera"></i>
+        </div>
+      </div>
+
+      <div class="travel-card p-4 flex items-center justify-between">
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Transit & Travel</p>
+          <p id="kpi-transit" class="text-2xl font-bold text-slate-900 mt-1">4h 10m</p>
+          <p class="text-xs text-sky-700 font-medium mt-0.5">Flights, high-speed rail & walks</p>
+        </div>
+        <div class="w-12 h-12 rounded-2xl bg-sky-50 border border-sky-200 flex items-center justify-center text-sky-600 text-xl">
+          <i class="fa-solid fa-train"></i>
+        </div>
+      </div>
+
+      <div class="travel-card p-4 flex items-center justify-between">
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Safety Cushion</p>
+          <p id="kpi-buffer" class="text-2xl font-bold text-amber-600 mt-1">2h 35m</p>
+          <p id="kpi-buffer-sub" class="text-xs text-slate-500 mt-0.5">20% transit risk + 15m platform buffer</p>
+        </div>
+        <div class="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 text-xl">
+          <i class="fa-solid fa-shield-heart"></i>
+        </div>
+      </div>
+
+      <div id="kpi-conflict-card" class="travel-card p-4 flex items-center justify-between border-emerald-200 bg-emerald-50/30">
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Trip Integrity</p>
+          <p id="kpi-conflicts" class="text-2xl font-bold text-emerald-700 mt-1">All Protected</p>
+          <p id="kpi-conflicts-sub" class="text-xs text-slate-600 mt-0.5">0 booking collisions</p>
+        </div>
+        <div id="kpi-conflict-icon" class="w-12 h-12 rounded-2xl bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-700 text-xl">
+          <i class="fa-solid fa-check"></i>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- TAB 1: TEMPORAL DAG & LEEWAY OPTIMIZER     -->
+    <!-- ========================================== -->
+    <section id="tab-dag" class="space-y-6">
+      
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Left Column: Controls (4 cols) -->
+        <div class="lg:col-span-4 space-y-5">
+          
+          <div class="travel-card p-5 space-y-5">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <i class="fa-solid fa-sliders text-sky-600"></i>
+                  <span>Trip Pacing & Safety Cushion</span>
+                </h2>
+                <p class="text-xs text-slate-500 mt-0.5">Fine-tune buffer time between connections</p>
+              </div>
+              <button onclick="resetDagControls()" class="text-xs font-medium text-sky-600 hover:underline">Reset</button>
+            </div>
+
+            <!-- Risk Multiplier Slider -->
+            <div class="space-y-1.5">
+              <div class="flex justify-between text-xs font-medium">
+                <span class="text-slate-700">Transit Safety Leeway ($\alpha_{\text{risk}}$)</span>
+                <span id="riskValueDisplay" class="font-bold text-sky-700">+20%</span>
+              </div>
+              <input id="riskSlider" type="range" min="0" max="50" step="5" value="20" oninput="updateDagMath()" />
+              <p class="text-[11px] text-slate-500">Adds proportional buffer time to flights, trains, and drives so minor delays don't cascade.</p>
+            </div>
+
+            <!-- Hub Overhead Slider -->
+            <div class="space-y-1.5">
+              <div class="flex justify-between text-xs font-medium">
+                <span class="text-slate-700">Station Platform & Security Buffer</span>
+                <span id="hubValueDisplay" class="font-bold text-sky-700">15 min</span>
+              </div>
+              <input id="hubSlider" type="range" min="5" max="45" step="5" value="15" oninput="updateDagMath()" />
+              <p class="text-[11px] text-slate-500">Extra time allocated for luggage drop, security queues, and walking between platforms.</p>
+            </div>
+
+            <!-- Stress Test & Delay Injection -->
+            <div class="pt-3 border-t border-slate-100 space-y-3">
+              <span class="text-xs font-bold text-slate-800 uppercase tracking-wider block">Stress Test Scenario</span>
+              
+              <button id="delayToggleBtn" onclick="toggleDelaySimulation()" class="w-full py-2.5 px-3.5 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-semibold flex items-center justify-between transition">
+                <span class="flex items-center gap-2">
+                  <i class="fa-solid fa-bolt text-amber-600"></i>
+                  <span>Simulate +35m Train Delay</span>
+                </span>
+                <span id="delayStateBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 font-bold">OFF</span>
+              </button>
+
+              <div class="flex items-center gap-2">
+                <button onclick="autoTrimLowestPriority()" class="flex-1 py-2 px-3 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold transition flex items-center justify-center gap-1.5 shadow-sm">
+                  <i class="fa-solid fa-shield"></i>
+                  <span>Auto-Protect Schedule</span>
+                </button>
+                <button onclick="restoreAllStops()" class="py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium transition">
+                  Restore All
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Add Wishlist Stop Card -->
+          <div class="travel-card p-5 space-y-3">
+            <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <i class="fa-solid fa-circle-plus text-sky-600"></i>
+              <span>Add an Optional Sightseeing Detour</span>
+            </h3>
+            <p class="text-xs text-slate-500">Insert an extra stop to test whether your schedule has enough slack.</p>
+            <div class="space-y-2">
+              <input id="newNodeTitle" type="text" placeholder="e.g. Trevi Fountain & Gelato" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs text-slate-800 focus:outline-none focus:border-sky-500" />
+              <div class="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <label class="text-[11px] text-slate-500">Duration (mins)</label>
+                  <input id="newNodeDuration" type="number" value="35" min="10" step="5" class="w-full px-2.5 py-1.5 rounded-lg border border-slate-200" />
+                </div>
+                <div>
+                  <label class="text-[11px] text-slate-500">Walk transit (mins)</label>
+                  <input id="newNodeTransit" type="number" value="15" min="0" step="5" class="w-full px-2.5 py-1.5 rounded-lg border border-slate-200" />
+                </div>
+              </div>
+              <button onclick="insertCustomStop()" class="w-full mt-2 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs transition">
+                Insert Detour into Timeline
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Right Column: Timeline (8 cols) -->
+        <div class="lg:col-span-8 space-y-4">
+          
+          <!-- Delay Conflict Banner (Dynamic) -->
+          <div id="delayAlertBanner" class="hidden travel-card p-4 bg-rose-50 border-rose-200 text-rose-900 flex items-start gap-3">
+            <div class="w-9 h-9 rounded-xl bg-rose-200 flex items-center justify-center text-rose-700 shrink-0 text-lg">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <div class="flex-1 text-xs">
+              <h4 class="font-bold text-sm text-rose-950">Schedule Collision Alert</h4>
+              <p class="mt-0.5" id="delayAlertText">A +35m delay on the Leonardo Express means you will arrive at the Colosseum at 15:37, missing your 15:30 strict slot!</p>
+              <div class="mt-2.5 flex items-center gap-2">
+                <button onclick="autoTrimLowestPriority()" class="px-3 py-1.5 rounded-lg bg-rose-700 hover:bg-rose-800 text-white font-semibold text-xs transition">
+                  Auto-Protect: Trim Optional Stop
+                </button>
+                <button onclick="toggleDelaySimulation()" class="px-3 py-1.5 rounded-lg bg-white border border-rose-300 text-rose-800 text-xs font-medium hover:bg-rose-100 transition">
+                  Clear Delay
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Header Strip for Timeline -->
+          <div class="travel-card p-4 flex items-center justify-between">
+            <div>
+              <h3 id="dagHeaderTitle" class="text-base font-bold text-slate-900">Rome & Florence Express</h3>
+              <p class="text-xs text-slate-500 mt-0.5">Chronological execution graph with dynamic transition cushions</p>
+            </div>
+            <div class="flex items-center gap-2 text-xs">
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 text-blue-800 border border-blue-200 font-medium">
+                <i class="fa-solid fa-lock text-[10px]"></i> Fixed Reservation
+              </span>
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200 font-medium">
+                <i class="fa-solid fa-sun text-[10px]"></i> Flexible Free Time
+              </span>
+            </div>
+          </div>
+
+          <!-- Timeline Container -->
+          <div id="dagTimelineContainer" class="space-y-4">
+            <!-- Dynamic Cards Populated by app.js -->
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ========================================== -->
+    <!-- TAB 2: ANTI-PHISHING OFFICIAL VERIFIER     -->
+    <!-- ========================================== -->
+    <section id="tab-verifier" class="hidden space-y-6">
+      
+      <!-- Intro Card -->
+      <div class="travel-card p-5 bg-gradient-to-r from-sky-50 to-indigo-50 border-sky-100">
+        <div class="max-w-3xl">
+          <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-800 text-xs font-semibold mb-2">
+            <i class="fa-solid fa-shield-heart text-sky-600"></i> Anti-Scam Protection
+          </div>
+          <h2 class="text-xl font-bold text-slate-900">Don't Get Tricked by Sponsored Google Search Ads</h2>
+          <p class="text-sm text-slate-600 mt-1">
+            Predatory ticket brokers bid on keywords like "Colosseum Tickets" to rank #1 on Google. They resell standard tickets at 100%–250% markups or fail to deliver timed QR codes. KronoLatch cross-references official root domains via Wikidata and Google Places to protect your wallet.
+          </p>
+        </div>
+      </div>
+
+      <!-- Live Search / URL Checker Bar -->
+      <div class="travel-card p-5 space-y-4">
+        <label class="block text-sm font-bold text-slate-900">Check Any Ticket Website or Candidate Booking Link:</label>
+        <div class="flex flex-col sm:flex-row gap-3">
+          <div class="relative flex-1">
+            <i class="fa-solid fa-link absolute left-3.5 top-3.5 text-slate-400"></i>
+            <input id="urlVerifyInput" type="text" value="https://www.colosseum-rome-tickets.org/fast-track" class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:border-sky-500" placeholder="Paste booking URL here..." />
+          </div>
+          <button onclick="inspectCustomUrl()" class="px-5 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-semibold text-sm transition shrink-0 shadow-sm flex items-center justify-center gap-2">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <span>Audit Domain Now</span>
+          </button>
+        </div>
+
+        <!-- Quick Presets -->
+        <div class="flex items-center gap-2 text-xs flex-wrap">
+          <span class="text-slate-500 font-medium">Test common traps:</span>
+          <button onclick="loadVerifierPreset('colosseum')" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition">Colosseum Reseller (€44 vs €18)</button>
+          <button onclick="loadVerifierPreset('sagrada')" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition">Sagrada Família Broker (€59 vs €26)</button>
+          <button onclick="loadVerifierPreset('louvre')" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition">Louvre Reseller (€52 vs €22)</button>
+          <button onclick="loadVerifierPreset('rail')" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition">Rail Ticket Fee Trap</button>
+        </div>
+
+        <!-- Dynamic Live Audit Result Box -->
+        <div id="liveAuditResultBox">
+          <!-- Populated by app.js -->
+        </div>
+      </div>
+
+      <!-- Real-World Known Trap vs Ground Truth Comparison Grid -->
+      <div>
+        <h3 class="text-base font-bold text-slate-900 mb-3">Pre-Audited Verified Monuments & National Railways</h3>
+        <div id="verifierComparisonGrid" class="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <!-- Populated by app.js -->
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ========================================== -->
+    <!-- TAB 3: FAIR GROUP EXPENSE SPLITTER         -->
+    <!-- ========================================== -->
+    <section id="tab-ledger" class="hidden space-y-6">
+      
+      <!-- Subtitle -->
+      <div class="travel-card p-5 bg-emerald-50/50 border-emerald-100">
+        <div class="max-w-3xl">
+          <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold mb-2">
+            <i class="fa-solid fa-scale-balanced text-emerald-600"></i> Fair Group Accounting
+          </div>
+          <h2 class="text-xl font-bold text-slate-900">Multi-Modal Group Splits Made Effortless</h2>
+          <p class="text-sm text-slate-600 mt-1">
+            When 2 travelers take high-speed rail while 2 rent a car, traditional apps force awkward manual math. KronoLatch lets you tag expenses to specific subgroups, handles multi-currency (EUR & PLN), and calculates the absolute minimum number of transfers to settle up.
+          </p>
+        </div>
+      </div>
+
+      <!-- Stats & Settlement Highlights -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Left: Expense Table & Subgroup Toggles (8 cols) -->
+        <div class="lg:col-span-8 space-y-4">
+          
+          <div class="travel-card p-5 space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 class="text-base font-bold text-slate-900">Group Expenditures</h3>
+                <p class="text-xs text-slate-500 mt-0.5">Click traveler chips to include or exclude people from specific expenses</p>
+              </div>
+              <div class="text-right">
+                <span class="text-xs text-slate-500 block">Total Normalized Spend</span>
+                <span id="ledgerTotalEur" class="text-lg font-bold text-emerald-700">€746.00</span>
+                <span id="ledgerTotalPln" class="text-[11px] text-slate-400 block">(3,207.80 PLN)</span>
+              </div>
+            </div>
+
+            <!-- Table -->
+            <div class="overflow-x-auto">
+              <table class="w-full text-xs text-left">
+                <thead class="text-slate-500 uppercase border-b border-slate-100 bg-slate-50/60 font-semibold">
+                  <tr>
+                    <th class="py-2.5 px-3">Expense</th>
+                    <th class="py-2.5 px-3">Paid By</th>
+                    <th class="py-2.5 px-3">Amount</th>
+                    <th class="py-2.5 px-3">Base (EUR)</th>
+                    <th class="py-2.5 px-3">Split Between (Click to toggle)</th>
+                    <th class="py-2.5 px-2 text-right"></th>
+                  </tr>
+                </thead>
+                <tbody id="ledgerTableBody" class="divide-y divide-slate-100">
+                  <!-- Populated by app.js -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Add Expense Form -->
+            <div class="pt-3 border-t border-slate-100">
+              <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">Record a New Group Expense</h4>
+              <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 text-xs">
+                <input id="expTitle" type="text" placeholder="Expense description (e.g. Trastevere Gelato)" class="sm:col-span-5 px-3 py-2 rounded-xl border border-slate-200" />
+                <select id="expPayer" class="sm:col-span-2 px-2.5 py-2 rounded-xl border border-slate-200 bg-white">
+                  <option value="Franek">Franek</option>
+                  <option value="Anna">Anna</option>
+                  <option value="Marek">Marek</option>
+                  <option value="Kasia">Kasia</option>
+                </select>
+                <input id="expAmount" type="number" placeholder="Amount" value="35" class="sm:col-span-2 px-3 py-2 rounded-xl border border-slate-200" />
+                <select id="expCurrency" class="sm:col-span-1 px-2 py-2 rounded-xl border border-slate-200 bg-white">
+                  <option value="EUR">EUR</option>
+                  <option value="PLN">PLN</option>
+                </select>
+                <button onclick="addLedgerExpense()" class="sm:col-span-2 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold transition">
+                  Add Expense
+                </button>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- Right: Net Balances & Settlement Plan (4 cols) -->
+        <div class="lg:col-span-4 space-y-5">
+          
+          <!-- Net Balances -->
+          <div class="travel-card p-5 space-y-3">
+            <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <i class="fa-solid fa-chart-pie text-sky-600"></i>
+              <span>Individual Net Balances</span>
+            </h3>
+            <p class="text-xs text-slate-500">Positive means you are owed; negative means you owe the group.</p>
+            <div id="netBalancesContainer" class="space-y-2">
+              <!-- Populated by app.js -->
+            </div>
+          </div>
+
+          <!-- Minimum Settlement Transfers -->
+          <div class="travel-card p-5 space-y-3 border-emerald-200 bg-emerald-50/20">
+            <div class="flex items-center justify-between">
+              <h3 class="text-sm font-bold text-emerald-950 flex items-center gap-2">
+                <i class="fa-solid fa-handshake text-emerald-600"></i>
+                <span>Minimum Settlement Plan</span>
+              </h3>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">Greedy Reduced</span>
+            </div>
+            <p class="text-xs text-slate-600">Settle all group debts in the fewest possible peer-to-peer transfers:</p>
+            <div id="settlementTransfersContainer" class="space-y-2.5">
+              <!-- Populated by app.js -->
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ========================================== -->
+    <!-- TAB 4: INTERACTIVE SKILL, CLI & TEST STUDIO-->
+    <!-- ========================================== -->
+    <section id="tab-studio" class="hidden space-y-6">
+      
+      <!-- Studio Intro -->
+      <div class="travel-card p-5 bg-gradient-to-r from-sky-50 to-emerald-50 border-sky-100">
+        <div class="max-w-3xl">
+          <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-800 text-xs font-semibold mb-2">
+            <i class="fa-solid fa-wand-magic-sparkles text-sky-600"></i> Universal AI Skill Harness
+          </div>
+          <h2 class="text-xl font-bold text-slate-900">Run in Gemini, Antigravity IDE, Cursor, or Terminal</h2>
+          <p class="text-sm text-slate-600 mt-1">
+            Export ready-to-use system instructions, rule files, and deterministic tools tailored for your trip corridor. You can also run the 4 live test cases below to verify everything works properly.
+          </p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Left Column: Generator Controls (5 cols) -->
+        <div class="lg:col-span-5 space-y-5">
+          
+          <div class="travel-card p-5 space-y-4">
+            <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <i class="fa-solid fa-gear text-sky-600"></i>
+              <span>Select Your Target AI Tool</span>
+            </h3>
+
+            <!-- Tool Target Selector -->
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <button onclick="setStudioTarget('gemini')" id="target-btn-gemini" class="p-3 rounded-xl border border-sky-500 bg-sky-50 text-sky-900 font-semibold text-left transition">
+                <i class="fa-solid fa-gem mr-1.5 text-sky-600"></i> Gemini Gem
+                <span class="block text-[10px] font-normal text-slate-500 mt-0.5">Google Search grounded</span>
+              </button>
+              
+              <button onclick="setStudioTarget('antigravity')" id="target-btn-antigravity" class="p-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 font-semibold text-left transition">
+                <i class="fa-solid fa-atom mr-1.5 text-indigo-600"></i> Antigravity IDE
+                <span class="block text-[10px] font-normal text-slate-500 mt-0.5">Agent workspace skill</span>
+              </button>
+              
+              <button onclick="setStudioTarget('cursor')" id="target-btn-cursor" class="p-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 font-semibold text-left transition">
+                <i class="fa-solid fa-terminal mr-1.5 text-slate-700"></i> Cursor Rules
+                <span class="block text-[10px] font-normal text-slate-500 mt-0.5">.cursorrules file</span>
+              </button>
+              
+              <button onclick="setStudioTarget('cli')" id="target-btn-cli" class="p-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 font-semibold text-left transition">
+                <i class="fa-brands fa-python mr-1.5 text-emerald-600"></i> Python CLI
+                <span class="block text-[10px] font-normal text-slate-500 mt-0.5">uv run kronolatch</span>
+              </button>
+            </div>
+
+            <!-- Parameters -->
+            <div class="space-y-3 pt-2 text-xs">
+              <div>
+                <label class="font-semibold text-slate-700">Trip Destination Corridor:</label>
+                <input id="cfgDest" type="text" value="Rome, Florence & Tuscany" oninput="renderStudioArtifact()" class="w-full mt-1 px-3 py-2 rounded-xl border border-slate-200 text-slate-800" />
+              </div>
+              <div>
+                <label class="font-semibold text-slate-700">Traveler Group Profile:</label>
+                <input id="cfgGroup" type="text" value="4 Adults (Franek, Anna, Marek, Kasia)" oninput="renderStudioArtifact()" class="w-full mt-1 px-3 py-2 rounded-xl border border-slate-200 text-slate-800" />
+              </div>
+            </div>
+
+            <!-- Modules Checkboxes -->
+            <div class="space-y-2 pt-2 border-t border-slate-100 text-xs">
+              <span class="font-bold text-slate-800 block">Include Modules in Generated Skill:</span>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input id="modVerify" type="checkbox" checked onchange="renderStudioArtifact()" class="rounded text-sky-600" />
+                <span class="text-slate-700">Anti-Phishing Vendor Verifier (Wikidata + Places)</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input id="modDag" type="checkbox" checked onchange="renderStudioArtifact()" class="rounded text-sky-600" />
+                <span class="text-slate-700">Temporal DAG Engine (+20% leeway + 15m station buffer)</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input id="modSplit" type="checkbox" checked onchange="renderStudioArtifact()" class="rounded text-sky-600" />
+                <span class="text-slate-700">Multi-Currency Group Splitter (EUR/PLN min transfers)</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input id="modTickets" type="checkbox" checked onchange="renderStudioArtifact()" class="rounded text-sky-600" />
+                <span class="text-slate-700">Ticket & PNR Confirmation Ingestion</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- On-Demand Manual Verification Test Suite -->
+          <div class="travel-card p-5 space-y-3">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <i class="fa-solid fa-vial-circle-check text-emerald-600"></i>
+                  <span>On-Demand Verification Tests</span>
+                </h3>
+                <p class="text-xs text-slate-500 mt-0.5">Run assertions live in browser or copy prompts for AI</p>
+              </div>
+              <button onclick="runAllManualTests()" class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition shadow-sm">
+                Run All 4
+              </button>
+            </div>
+
+            <div id="manualTestSuiteList" class="space-y-2.5">
+              <!-- Populated by app.js -->
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Right Column: Code Output & Preview (7 cols) -->
+        <div class="lg:col-span-7 space-y-4">
+          <div class="travel-card p-4 space-y-3">
+            <div class="flex items-center justify-between flex-wrap gap-2 border-b border-slate-100 pb-3">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid fa-file-code text-sky-600"></i>
+                <span id="studioFileHeader" class="text-xs font-bold text-slate-800 font-mono">SKILL.md — Live Generated Artifact</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span id="studioCharCount" class="text-[11px] font-mono text-slate-400">1,240 chars</span>
+                <button onclick="copyGeneratedArtifact()" class="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-medium text-xs transition flex items-center gap-1.5 shadow-sm">
+                  <i class="fa-regular fa-copy"></i>
+                  <span>Copy to Clipboard</span>
+                </button>
+                <button onclick="downloadGeneratedArtifact()" class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs transition flex items-center gap-1.5">
+                  <i class="fa-solid fa-download"></i>
+                  <span id="downloadBtnLabel">Download</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Code Display -->
+            <pre class="p-4 rounded-xl bg-slate-900 text-slate-100 font-mono text-xs overflow-x-auto max-h-[620px] leading-relaxed"><code id="studioCodeOutput">Loading...</code></pre>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="mt-auto border-t border-slate-200 bg-white py-6 text-center text-xs text-slate-500">
+    <div class="max-w-[1400px] mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+      <div class="flex items-center gap-2">
+        <span class="font-bold text-slate-800">KronoLatch</span>
+        <span>• Deterministic Trip Orchestrator & Group Expense Splitter</span>
+      </div>
+      <div class="flex items-center gap-4 text-slate-600">
+        <a href="https://github.com/FranekJemiolo/kronolatch" target="_blank" class="hover:text-sky-600 transition flex items-center gap-1">
+          <i class="fa-brands fa-github"></i> GitHub Repository
+        </a>
+        <span>•</span>
+        <span>Offline-First (PWA Ready)</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Core Client-Side Logic -->
+  <script src="app.js"></script>
+</body>
+</html>

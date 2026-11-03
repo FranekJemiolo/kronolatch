@@ -1,0 +1,179 @@
+{
+  "trip_id": "rome-florence-express-2026",
+  "title": "Rome & Florence Multi-Modal Gateway",
+  "destination": "Rome & Florence, Italy",
+  "base_currency": "EUR",
+  "travelers": ["Franek", "Anna", "Marek", "Kasia"],
+  "parameters": {
+    "risk_multiplier": 0.20,
+    "hub_overhead_minutes": 15
+  },
+  "nodes": [
+    {
+      "id": "n1",
+      "title": "Flight WMI (Warsaw Modlin) → FCO (Rome Fiumicino)",
+      "type": "fixed",
+      "category": "flight",
+      "transit_mode": "flight",
+      "transit_min": 0,
+      "duration_min": 145,
+      "fixed_start_time": "08:00",
+      "fixed_start_min": 480,
+      "priority": 10,
+      "pnr": "RYR-9941K",
+      "official_domain": "ryanair.com",
+      "booking_url": "https://www.ryanair.com",
+      "active": true,
+      "notes": "Gate closes 30m prior to departure. Carry-on verified."
+    },
+    {
+      "id": "n2",
+      "title": "Leonardo Express High-Speed Train (FCO → Roma Termini)",
+      "type": "flexible",
+      "category": "rail",
+      "transit_mode": "train",
+      "transit_min": 25,
+      "duration_min": 32,
+      "min_duration_min": 32,
+      "ideal_duration_min": 32,
+      "priority": 9,
+      "pnr": "TREN-88210",
+      "official_domain": "trenitalia.com",
+      "booking_url": "https://www.trenitalia.com",
+      "active": true,
+      "notes": "Direct airport shuttle every 15 mins. Validate in app before boarding."
+    },
+    {
+      "id": "n3",
+      "title": "Hotel Bag Drop & Traditional Trastevere Lunch",
+      "type": "flexible",
+      "category": "food",
+      "transit_mode": "walk",
+      "transit_min": 18,
+      "duration_min": 65,
+      "min_duration_min": 30,
+      "ideal_duration_min": 65,
+      "priority": 4,
+      "pnr": "WALK-IN",
+      "official_domain": "maps.google.com",
+      "active": true,
+      "notes": "Relaxed lunch window. Can be shortened if incoming train is delayed."
+    },
+    {
+      "id": "n4",
+      "title": "Pantheon Exterior & Scenic Piazza Navona Stroll",
+      "type": "flexible",
+      "category": "sightseeing",
+      "transit_mode": "walk",
+      "transit_min": 15,
+      "duration_min": 50,
+      "min_duration_min": 20,
+      "ideal_duration_min": 50,
+      "priority": 3,
+      "pnr": "MIC-CULTURA",
+      "official_domain": "portale.museiitaliani.it",
+      "active": true,
+      "notes": "Scenic walk en route to Colosseum; first candidate for auto-trim."
+    },
+    {
+      "id": "n5",
+      "title": "Colosseum Arena & Underground Timed Entry (HARD LOCK)",
+      "type": "fixed",
+      "category": "sightseeing",
+      "transit_mode": "walk",
+      "transit_min": 22,
+      "duration_min": 120,
+      "fixed_start_time": "15:30",
+      "fixed_start_min": 930,
+      "priority": 10,
+      "pnr": "COL-77419-IT",
+      "official_domain": "ticketing.colosseo.it",
+      "booking_url": "https://ticketing.colosseo.it",
+      "active": true,
+      "notes": "STRICT ID CHECK: Must arrive 20m before entry slot or ticket is forfeited."
+    },
+    {
+      "id": "n6",
+      "title": "Frecciarossa 9548 High-Speed Rail (Roma Termini → Firenze SMN)",
+      "type": "fixed",
+      "category": "rail",
+      "transit_mode": "train",
+      "transit_min": 25,
+      "duration_min": 95,
+      "fixed_start_time": "18:50",
+      "fixed_start_min": 1130,
+      "priority": 10,
+      "pnr": "FR-551902",
+      "official_domain": "trenitalia.com",
+      "booking_url": "https://www.trenitalia.com",
+      "active": true,
+      "notes": "Coach 4, Seats 12A-12D. Split group: 2 on rail, 2 picking up Tuscany car."
+    }
+  ],
+  "expenses": [
+    {
+      "id": "e1",
+      "title": "Ryanair Flights WMI → FCO (4 Pax)",
+      "payer": "Franek",
+      "amount": 340.0,
+      "currency": "EUR",
+      "exchange_rate_to_base": 1.0,
+      "participants": ["Franek", "Anna", "Marek", "Kasia"],
+      "node_id": "n1"
+    },
+    {
+      "id": "e2",
+      "title": "Colosseum Official Full-Experience Tickets",
+      "payer": "Anna",
+      "amount": 96.0,
+      "currency": "EUR",
+      "exchange_rate_to_base": 1.0,
+      "participants": ["Franek", "Anna", "Marek", "Kasia"],
+      "node_id": "n5"
+    },
+    {
+      "id": "e3",
+      "title": "Frecciarossa High-Speed Rail (Train Subgroup)",
+      "payer": "Marek",
+      "amount": 90.0,
+      "currency": "EUR",
+      "exchange_rate_to_base": 1.0,
+      "participants": ["Marek", "Kasia"],
+      "node_id": "n6"
+    },
+    {
+      "id": "e4",
+      "title": "Tuscany Rental Car & Autostrada Fuel (Car Subgroup)",
+      "payer": "Franek",
+      "amount": 160.0,
+      "currency": "EUR",
+      "exchange_rate_to_base": 1.0,
+      "participants": ["Franek", "Anna"],
+      "node_id": "n6"
+    },
+    {
+      "id": "e5",
+      "title": "Modlin Airport Parking (Poland, 4 Pax)",
+      "payer": "Kasia",
+      "amount": 258.0,
+      "currency": "PLN",
+      "exchange_rate_to_base": 4.30,
+      "participants": ["Franek", "Anna", "Marek", "Kasia"],
+      "node_id": "n1"
+    }
+  ],
+  "vendor_checks": [
+    {
+      "venue": "Parco Archeologico del Colosseo",
+      "candidate_url": "https://www.colosseum-rome-tickets.org/fast-track",
+      "candidate_root_domain": "colosseum-rome-tickets.org",
+      "ground_truth_root_domain": "colosseo.it",
+      "official_domain": "ticketing.colosseo.it",
+      "official_base_price": 18.0,
+      "candidate_price": 44.0,
+      "status": "HIGH_RISK_CLONE",
+      "markup_percent": 144.4,
+      "flags": ["root_domain_mismatch", "deceptive_token_tickets", "excessive_markup"]
+    }
+  ]
+}

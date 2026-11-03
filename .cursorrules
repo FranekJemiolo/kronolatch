@@ -1,0 +1,24 @@
+# KronoLatch Project Standards (.cursorrules)
+
+# Architecture & Philosophy
+- KronoLatch is a deterministic-first, offline-first trip orchestrator.
+- Deterministic math MUST always precede GenAI synthesis: never guess transit times, leeway buffers, or domain verifications.
+- Python packages are managed with `uv` (Python 3.12+).
+- Client-side web application in `/web` is zero-build static HTML/CSS/JS deployed to GitHub Pages.
+
+# Python Code Standards
+- Strict type hinting with Pydantic v2 models in `src/kronolatch/models.py`.
+- Format and lint with `ruff` (100 char line limit).
+- All CLI commands implemented with `typer` and formatted with `rich`.
+- When modifying DAG math or domain verification, always verify with:
+  `uv run pytest` and `uv run kronolatch self-test`.
+
+# Anti-Phishing Domain Rules
+- Always normalize URLs to canonical root domains (eTLD+1) before comparison.
+- Preserve the 4-status classification: `VERIFIED_OFFICIAL`, `TRUSTED_AGGREGATOR`, `HIGH_RISK_CLONE`, `UNVERIFIED_THIRD_PARTY`.
+- Any candidate URL exhibiting >15% price markup or root domain mismatch with deceptive tokens must be flagged as `HIGH_RISK_CLONE` and blocked.
+
+# Temporal DAG Invariants
+- Fixed nodes (`type: "fixed"`) cannot shift departure/entry times.
+- Transit edges must include transit time + station/security overhead + risk buffer.
+- When slack is negative, emit `HARD_CONFLICT` and run `optimize_and_cut` to compress/trim flexible nodes.
