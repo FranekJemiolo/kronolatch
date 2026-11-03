@@ -1,0 +1,93 @@
+{
+  "mcpVersion": "2025-01-01",
+  "serverName": "kronolatch-trip-orchestrator",
+  "description": "Model Context Protocol (MCP) tool harness for KronoLatch deterministic trip orchestration, anti-phishing ticket domain verification, and group expense debt reduction.",
+  "tools": [
+    {
+      "name": "verify_vendor_url",
+      "description": "Audits a candidate ticket or transit booking URL against canonical root domains (Wikidata P856 and Google Places websiteUri) to block SEO phishing clones and reseller markups.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "candidate_url": {
+            "type": "string",
+            "description": "The booking link found on Google Search or an aggregator"
+          },
+          "venue_name": {
+            "type": "string",
+            "description": "Name of the monument, attraction, or transit operator (e.g. 'Colosseum', 'Louvre', 'Trenitalia')"
+          },
+          "official_domain": {
+            "type": "string",
+            "description": "Optional ground-truth root domain if known"
+          },
+          "candidate_price": {
+            "type": "number",
+            "description": "Quoted ticket price on the candidate site"
+          },
+          "official_base_price": {
+            "type": "number",
+            "description": "Official admission base fare"
+          }
+        },
+        "required": ["candidate_url"]
+      }
+    },
+    {
+      "name": "validate_temporal_dag",
+      "description": "Validates an itinerary's temporal DAG, computes mode-specific transition buffers (flights 120m, rail 15m), propagates domino delays, and identifies hard conflicts at locked fixed reservations.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "nodes": {
+            "type": "array",
+            "items": { "type": "object" },
+            "description": "List of itinerary stops conforming to trip-dag.schema.json"
+          },
+          "risk_multiplier": {
+            "type": "number",
+            "default": 0.20,
+            "description": "Proportional transit delay risk leeway (alpha_risk)"
+          },
+          "hub_overhead_minutes": {
+            "type": "integer",
+            "default": 15,
+            "description": "Default station queue and platform navigation buffer"
+          },
+          "injected_delays": {
+            "type": "object",
+            "description": "Map of node_id to delay in minutes to stress-test downstream connections"
+          }
+        },
+        "required": ["nodes"]
+      }
+    },
+    {
+      "name": "settle_group_expenses",
+      "description": "Computes net balances across multi-currency expenses (supporting asymmetric subgroup shares) and calculates the minimum number of peer-to-peer settlement transfers.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "expenses": {
+            "type": "array",
+            "items": { "type": "object" },
+            "description": "List of expense records with payer, amount, currency, and participants"
+          },
+          "base_currency": {
+            "type": "string",
+            "default": "EUR"
+          },
+          "alternate_currency": {
+            "type": "string",
+            "default": "PLN"
+          },
+          "alternate_rate": {
+            "type": "number",
+            "default": 4.30
+          }
+        },
+        "required": ["expenses"]
+      }
+    }
+  ]
+}

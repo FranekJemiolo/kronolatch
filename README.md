@@ -3,10 +3,15 @@
 > **Deterministic-First, Agent-Assisted Trip Orchestrator, Anti-Phishing Ticket Domain Verifier, Temporal DAG Itinerary Validator & Multi-Currency Group Expense Splitter.**
 
 [![CI](https://github.com/FranekJemiolo/kronolatch/actions/workflows/ci.yml/badge.svg)](https://github.com/FranekJemiolo/kronolatch/actions/workflows/ci.yml)
+[![Pages Deployment](https://github.com/FranekJemiolo/kronolatch/actions/workflows/deploy-pages.yml/badge.svg)](https://franekjemiolo.github.io/kronolatch/)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 [![uv Managed](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
 [![License: MIT](https://img.shields.io/badge/License-MIT-emerald.svg)](LICENSE)
-[![Zero-Cloud-Cost](https://img.shields.io/badge/Architecture-Offline--First%20%7C%20Serverless-purple.svg)](#offline-first-philosophy)
+[![Live Web App](https://img.shields.io/badge/Demo-GitHub%20Pages-sky.svg)](https://franekjemiolo.github.io/kronolatch/)
+
+**Live Application:** 🌐 [https://franekjemiolo.github.io/kronolatch/](https://franekjemiolo.github.io/kronolatch/)  
+**Architectural Vision & Audit Matrix:** 📄 [`docs/VISION.md`](docs/VISION.md)  
+**Portable AI Skills:** 🤖 [`skills/`](skills/)
 
 ---
 
@@ -21,54 +26,45 @@ Modern travel planning is plagued by three persistent failure modes:
 
 ---
 
-## 🏛️ Core Architectural Pillars
+## 🏛️ The Three Execution & Deployment Modes
 
-```mermaid
-graph TD
-    A[Unstructured Confirmation / Travel Wishlist] --> B[KronoLatch Extraction & Ingestion]
-    B --> C[Module 1: Anti-Phishing Vendor Verifier]
-    B --> D[Module 2: Temporal DAG Engine]
-    B --> E[Module 3: Multi-Currency Group Ledger]
-    
-    C --> C1[Wikidata P856 Ground Truth]
-    C --> C2[Google Places websiteUri]
-    C --> C3[Canonical eTLD+1 Root Normalizer]
-    
-    D --> D1[Dynamic Mode Buffers: Flights 120m, Rail 15m]
-    D --> D2[Domino Delay Propagation]
-    D --> D3[Auto-Cut & Compression Optimizer]
-    
-    E --> E1[Subgroup Split Allocation]
-    E --> E2[Multi-Currency Normalization EUR/PLN]
-    E --> E3[Greedy Min-Cash-Flow Graph Reducer]
+KronoLatch is structured into three clear, decoupled tiers:
 
-    C3 --> F[Zero-Cloud-Cost GitHub Pages Web App & CLI]
-    D3 --> F
-    E3 --> F
-```
+| Tier | Directory | Target Audience | Key Capabilities |
+| :--- | :--- | :--- | :--- |
+| **1. The Simple App** | [`web/`](web/) | Casual travelers, families | 100% offline-first PWA hosted on GitHub Pages with calm, pleasant travel colors, live timeline, sliders, and expense graphs. |
+| **2. The Tools & CLI** | [`src/kronolatch/`](src/kronolatch/) | Power users, engineers, CI | Fast, deterministic Python CLI (`uv run kronolatch`) with mathematical certainty and zero-hallucination checks. |
+| **3. Copyable Skills** | [`skills/`](skills/) | AI Agents, Gemini, Cursor | Modular system instructions for Gemini Gems, Antigravity IDE, Cursor, and Model Context Protocol (MCP) servers. |
 
-### 1. Anti-Phishing Official Vendor Verifier
-- Strips subdomains to canonical **eTLD+1** root domains.
-- Anchors against authoritative Wikidata entity properties (`P856`) and Google Places API (`websiteUri`).
-- Detects deceptive keywords (`-tickets`, `-fast-track`, `-official`) and $>15\%$ markups to block scam clones.
+---
 
-### 2. Temporal DAG Engine & Dynamic Leeway
-- Models every day as a Directed Acyclic Graph enforcing:
-  $$\text{Total Transition Time} = T_{\text{transit}} + T_{\text{overhead}} + \lceil T_{\text{transit}} \times \alpha_{\text{risk}} \rceil + B_{\text{fixed}}$$
-- Automatic mode rules:
-  - **Flights:** $T_{\text{overhead}} = 120\text{ min}$, $\alpha_{\text{risk}} = 0.15$
-  - **Trains / Buses:** $T_{\text{overhead}} = 15\text{ min}$, $\alpha_{\text{risk}} = 0.20$
-  - **Rental Cars:** $T_{\text{overhead}} = 15\text{ min}$, $\alpha_{\text{risk}} = 0.25$
-  - **Walking:** $T_{\text{overhead}} = 5\text{ min}$, $\alpha_{\text{risk}} = 0.10$
-- **Auto-Cut Optimizer:** Automatically compresses flexible stops towards their `min_duration_min` or trims lowest-priority stops to resolve downstream hard conflicts.
+## 📸 Application Screenshots (Live GitHub Pages UI)
 
-### 3. Multi-Currency Group Ledger
-- Contextually links expenditures to itinerary nodes.
-- Handles asymmetric subgroup shares (e.g. car subgroup vs rail subgroup).
-- Computes net balances in base currency and executes a deterministic greedy graph reduction algorithm to settle all debts in the absolute minimum number of peer-to-peer transfers.
+### 1. Trip Schedule & Dynamic Leeway Optimizer (Tab 1)
+*Interactive timeline showing locked reservations (Colosseum 15:30 strict slot), flexible windows, transition cushions, and one-click train delay stress-testing.*
 
-### 4. Portable Agent Skills & Rules
-- Exportable system instructions and tool harnesses for **Gemini Gems**, **Google Antigravity IDE (`.antigravity/skills/`)**, and **Cursor (`.cursorrules`)**.
+![Trip Schedule & Safety Leeway](docs/assets/screenshot-schedule.png)
+
+---
+
+### 2. Ticket Scam & Anti-Phishing Domain Checker (Tab 2)
+*Live canonical eTLD+1 root domain inspector cross-referencing Wikidata P856 and Google Places to block Google Search Ad clones and calculate reseller markups.*
+
+![Ticket Scam & Domain Checker](docs/assets/screenshot-scam-checker.png)
+
+---
+
+### 3. Fair Group Expense Splitter & Settlement Plan (Tab 3)
+*Multi-currency group accounting supporting asymmetric subgroup allocations (drivers vs train passengers) and greedy minimum-transaction debt reduction.*
+
+![Fair Group Expense Splitter](docs/assets/screenshot-expense-splitter.png)
+
+---
+
+### 4. Universal AI Travel Assistant & On-Demand Test Studio (Tab 4)
+*Live skill generator for Gemini Gems, Antigravity IDE, Cursor, and Python CLI, paired with an on-demand browser test runner executing client-side assertions.*
+
+![AI Travel Assistant & Test Studio](docs/assets/screenshot-ai-studio.png)
 
 ---
 
@@ -76,16 +72,16 @@ graph TD
 
 KronoLatch is managed with [`uv`](https://github.com/astral-sh/uv).
 
-### 1. Installation & Verification
+### 1. Installation & Automated Tests
 ```bash
 # Clone the repository
 git clone https://github.com/FranekJemiolo/kronolatch.git
 cd kronolatch
 
-# Run automated unit tests
+# Run automated unit tests (11/11 passing)
 uv run pytest
 
-# Run on-demand architectural self-test suite
+# Run on-demand architectural self-test suite (4/4 passing)
 uv run kronolatch self-test
 ```
 
@@ -102,7 +98,7 @@ uv run kronolatch validate --inject-delay n2:35 --auto-cut
 
 #### Anti-Phishing Domain Verifier
 ```bash
-# Test an SEO clone against Colosseum official ticketing
+# Audit an SEO reseller clone against Colosseum official ticketing
 uv run kronolatch verify-url "https://www.colosseum-rome-tickets.org/fast-track" \
   --venue "Parco Archeologico del Colosseo" \
   --price 44.00 \
@@ -124,16 +120,30 @@ uv run kronolatch export-skill --target antigravity
 
 ---
 
-## 🌐 Static Web App & PWA (GitHub Pages)
+## 🤖 Portable AI Skills & Integration
 
-The `/web` folder contains a 100% client-side, zero-cloud-cost Progressive Web App designed with a pleasant, welcoming palette:
+Drop-in instructions and configuration harnesses for your preferred AI tools:
 
-- **Tab 1: Temporal DAG & Leeway Optimizer** — Interactive sliders for risk multiplier ($\alpha_{\text{risk}}$), station buffer, and simulated delay injection with live conflict indicators and one-click auto-cut.
-- **Tab 2: Official Domain & Ticket Anti-Phishing Verifier** — Real-time URL auditor with scam clone detection, price markup comparison, and preset comparisons.
-- **Tab 3: Multi-Modal Group Expense Ledger** — Uneven subgroup splits, multi-currency conversion, and minimal settlement graph.
-- **Tab 4: Interactive Skill, CLI & Manual Test Studio** — Live generation of `SKILL.md`, `.cursorrules`, and interactive test runner.
+- 💎 **Gemini Gems:** [`skills/gemini/SKILL.md`](skills/gemini/SKILL.md) — System instructions grounded with Google Search & Google Maps.
+- ⚛️ **Google Antigravity IDE:** [`skills/antigravity/`](skills/antigravity/) — Agent skills for vendor verification, DAG validation, and group splits.
+- 💻 **Cursor Rules:** [`skills/cursor/.cursorrules`](skills/cursor/.cursorrules) — Coding and invariant standards for Cursor Composer.
+- 🔌 **Model Context Protocol (MCP):** [`skills/mcp/kronolatch_mcp_tools.json`](skills/mcp/kronolatch_mcp_tools.json) — Tool schemas for Claude Desktop and MCP agent hosts.
 
-### Local Web Preview
+See [`skills/README.md`](skills/README.md) for full installation guidelines.
+
+---
+
+## 🧪 Verification & Test Protocols
+
+For the full test specification, expected assertion criteria, and copyable prompts for AI agents, see [`tests/manual_ai_verification.md`](tests/manual_ai_verification.md):
+1. **Test 1: The SEO Ticket Trap** (Anti-Phishing Assertion)
+2. **Test 2: Cascading Regional Rail Delay** (Temporal DAG Assertion)
+3. **Test 3: Asymmetric Subgroup Cost Split** (Ledger Assertion)
+4. **Test 4: Unstructured Booking Ingestion to Valid Schema** (Schema Assertion)
+
+---
+
+## 🌐 Local Web App Preview
 ```bash
 python3 -m http.server -d web 8080
 # Open http://localhost:8080 in your browser
@@ -141,25 +151,6 @@ python3 -m http.server -d web 8080
 
 ---
 
-## 🔑 Optional BYOK (Bring Your Own Key) Setup
-
-KronoLatch operates 100% offline using its curated ground-truth database. To enable live web lookups:
-- **Google Maps Places API (New):**
-  Export `GOOGLE_MAPS_API_KEY="AIzaSy..."` to enable dynamic live `websiteUri` queries.
-- **Gemini 2.5 / Flash API:**
-  Enter your Gemini API key in Tab 4 of the web app to extract messy confirmation emails or tickets directly in the browser.
-
----
-
-## 🧪 Automated & Manual Verification Suite
-
-See [`tests/manual_ai_verification.md`](tests/manual_ai_verification.md) for the complete test protocol containing:
-1. **The SEO Ticket Trap** (Anti-Phishing Assertion)
-2. **Cascading Regional Rail Delay** (Temporal DAG Assertion)
-3. **Asymmetric Subgroup Cost Split** (Ledger Assertion)
-4. **Unstructured Booking Ingestion to Valid Schema** (Ingestion Assertion)
-
----
-
-## 📄 License
-MIT License. Created for frictionless, stress-free group exploration.
+## 📄 License & Vision
+- Full Architectural Vision & Implementation Audit: [`docs/VISION.md`](docs/VISION.md)
+- License: MIT

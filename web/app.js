@@ -368,6 +368,9 @@ function switchTab(tabId) {
       btn.classList.remove('active');
     }
   });
+  if (window.history && window.history.replaceState) {
+    window.history.replaceState(null, null, '#' + tabId);
+  }
 }
 
 function switchTripPreset(presetKey) {
@@ -1173,4 +1176,10 @@ window.onload = function () {
   renderLedger();
   renderStudioArtifact();
   renderManualTests();
+
+  // Support direct tab linking via URL hash (e.g. #verifier, #ledger, #studio)
+  const hash = window.location.hash.replace('#', '');
+  if (['dag', 'verifier', 'ledger', 'studio'].includes(hash)) {
+    switchTab(hash);
+  }
 };
