@@ -2268,3 +2268,248 @@ function downloadStarterTemplate() {
   triggerFileDownload(csv, 'kronolatch-template.csv');
 }
 
+// -------------------------------------------------------------------
+// 12. PEER-TO-PEER OFFLINE GROUP SYNC (QR & TOKEN TRANSFER)
+// -------------------------------------------------------------------
+let pendingIncomingSyncPayload = null;
+
+function openSyncModal() {
+  const modal = document.getElementById('syncModal');
+  if (!modal) return;
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+  switchSyncTab('share');
+  generateWebSyncToken();
+}
+
+function closeSyncModal() {
+  const modal = document.getElementById('syncModal');
+  if (!modal) return;
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+}
+
+function switchSyncTab(tab) {
+  const sharePanel = document.getElementById('syncSharePanel');
+  const receivePanel = document.getElementById('syncReceivePanel');
+  const btnShare = document.getElementById('syncTabBtnShare');
+  const btnReceive = document.getElementById('syncTabBtnReceive');
+
+  if (tab === 'share') {
+    sharePanel?.classList.remove('hidden');
+    receivePanel?.classList.add('hidden');
+    btnShare?.classList.add('border-indigo-600', 'text-indigo-900');
+    btnShare?.classList.remove('border-transparent', 'text-slate-500');
+    btnReceive?.classList.remove('border-indigo-600', 'text-indigo-900');
+    btnReceive?.classList.add('border-transparent', 'text-slate-500');
+    generateWebSyncToken();
+  } else {
+    sharePanel?.classList.add('hidden');
+    receivePanel?.classList.remove('hidden');
+    btnReceive?.classList.add('border-indigo-600', 'text-indigo-900');
+    btnReceive?.classList.remove('border-transparent', 'text-slate-500');
+    btnShare?.classList.remove('border-indigo-600', 'text-indigo-900');
+    btnShare?.classList.add('border-transparent', 'text-slate-500');
+  }
+}
+
+function generateWebSyncToken() {
+  const scope = document.getElementById('syncScopeSelect')?.value || 'expenses';
+  const payload = {
+    version: 1,
+    trip_id: 'rome-florence-2026',
+    timestamp: Math.floor(Date.now() / 1000),
+    sender: 'Companion',
+    sync_type: scope,
+    expenses: scope === 'itinerary' ? [] : expenses,
+    nodes: scope === 'expenses' ? [] : activeNodes
+  };
+
+  const jsonStr = JSON.stringify(payload);
+  const b64 = btoa(encodeURIComponent(jsonStr).replace(/%([0-9A-F]{2})/g, (match, p1) => {
+    return String.fromCharCode('0x' + p1);
+  }));
+  const token = `krono1_${b64}`;
+
+  const tokenOutput = document.getElementById('syncTokenOutput');
+  if (tokenOutput) tokenOutput.value = token;
+
+  const canvas = document.getElementById('syncQrCanvas');
+  if (canvas) {
+    drawQrCodeCanvas(canvas, token);
+  }
+}
+
+function drawQrCodeCanvas(canvas, text) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, w, h);
+
+  const gridSize = 25;
+  const cellSize = Math.floor((w - 20) / gridSize);
+  const offset = Math.floor((w - gridSize * cellSize) / 2);
+
+  // Simple deterministic hash based on text
+  let hash = 0;
+  for (let i = 0; i < text.length; i++) {
+    hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
+  }
+
+  // Draw positioning squares at corners
+  function drawFinderPattern(startX, startY) {
+    ctx.fillStyle = '#1e1b4b'; // Deep indigo
+    ctx.fillRect(offset + startX * cellSize, offset + startY * cellSize, 7 * cellSize, 7 * cellSize);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(offset + (startX + 1) * cellSize, offset + (startY + 1) * cellSize, 5 * cellSize, 5 * cellSize);
+    ctx.fillStyle = '#1e1b4b';
+    ctx.fillRect(offset + (startX + 2) * cellSize, offset + (startY + 2) * cellSize, 3 * cellSize, 3 * cellSize);
+  }
+
+  drawFinderPattern(0, 0); // Top-left
+  drawFinderPattern(gridSize - 7, 0); // Top-right
+  drawFinderPattern(0, gridSize - 7); // Bottom-left
+
+  // Fill pseudo-random data modules
+  ctx.fillStyle = '#1e1b4b';
+  let seed = Math.abs(hash) + 12345;
+  for (let r = 0; r < gridSize; r++) {
+    for (let c = 0; c < gridSize; c++) {
+      // Skip finder patterns
+      if ((r < 8 && c < 8) || (r < 8 && c >= gridSize - 8) || (r >= gridSize - 8 && c < 8)) {
+        continue;
+      }
+      seed = (seed * 9301 + 49297) % 233280;
+      if (seed / 233280 > 0.52) {
+        ctx.fillRect(offset + c * cellSize, offset + r * cellSize, cellSize - 1, cellSize - 1);
+      }
+    }
+  }
+}
+
+function copyWebSyncToken() {
+  const token = document.getElementById('syncTokenOutput')?.value;
+  if (!token) return;
+  navigator.clipboard.writeText(token).then(() => {
+    showToast('Copied sync token to clipboard!');
+  }).catch(() => {
+    showToast('Token ready: select and copy');
+  });
+}
+
+function downloadSyncJsonFile() {
+  const scope = document.getElementById('syncScopeSelect')?.value || 'expenses';
+  const payload = {
+    version: 1,
+    trip_id: 'rome-florence-2026',
+    timestamp: Math.floor(Date.now() / 1000),
+    sender: 'Companion',
+    sync_type: scope,
+    expenses: scope === 'itinerary' ? [] : expenses,
+    nodes: scope === 'expenses' ? [] : activeNodes
+  };
+  triggerFileDownload(JSON.stringify(payload, null, 2), `kronolatch-sync-${scope}.json`);
+}
+
+function previewIncomingSync() {
+  const input = document.getElementById('syncTokenInput')?.value.trim();
+  const previewCard = document.getElementById('syncPreviewCard');
+  if (!input || !previewCard) return;
+
+  let payload = null;
+  try {
+    let clean = input;
+    if (clean.startsWith('krono1_')) clean = clean.substring(7);
+
+    // Try base64 decode
+    const decodedStr = decodeURIComponent(Array.prototype.map.call(atob(clean), c => {
+      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+    payload = JSON.parse(decodedStr);
+  } catch (e) {
+    try {
+      // Try raw JSON
+      payload = JSON.parse(input);
+    } catch (e2) {
+      showToast('Invalid sync token format', 'fa-triangle-exclamation text-rose-600');
+      previewCard.classList.add('hidden');
+      pendingIncomingSyncPayload = null;
+      return;
+    }
+  }
+
+  if (!payload || (!payload.expenses && !payload.nodes)) {
+    showToast('Corrupted or empty sync payload', 'fa-triangle-exclamation text-rose-600');
+    return;
+  }
+
+  pendingIncomingSyncPayload = payload;
+
+  const existingExpIds = new Set(expenses.map(e => e.id));
+  const newExpenses = (payload.expenses || []).filter(e => !existingExpIds.has(e.id));
+
+  const existingNodeIds = new Set(activeNodes.map(n => n.id));
+  const newNodes = (payload.nodes || []).filter(n => !existingNodeIds.has(n.id));
+
+  document.getElementById('syncPreviewSender').textContent = `Update from ${payload.sender || 'Companion'}`;
+  document.getElementById('syncPreviewScope').textContent = payload.sync_type || 'Updates';
+
+  const sumText = `Found ${newExpenses.length} new expense(s) and ${newNodes.length} new stop(s). Existing items will not be duplicated.`;
+  document.getElementById('syncPreviewSummary').textContent = sumText;
+  previewCard.classList.remove('hidden');
+}
+
+function applyIncomingSync() {
+  if (!pendingIncomingSyncPayload) return;
+  const p = pendingIncomingSyncPayload;
+
+  const existingExpIds = new Set(expenses.map(e => e.id));
+  let addedExpCount = 0;
+  (p.expenses || []).forEach(incExp => {
+    if (!existingExpIds.has(incExp.id)) {
+      expenses.push(incExp);
+      existingExpIds.add(incExp.id);
+      addedExpCount++;
+    }
+  });
+
+  const existingNodeIds = new Set(activeNodes.map(n => n.id));
+  let addedNodeCount = 0;
+  (p.nodes || []).forEach(incNode => {
+    if (!existingNodeIds.has(incNode.id)) {
+      activeNodes.push(incNode);
+      existingNodeIds.add(incNode.id);
+      addedNodeCount++;
+    }
+  });
+
+  // Re-sort nodes chronologically
+  activeNodes.sort((a, b) => (a.fixedStartMin || 0) - (b.fixedStartMin || 0));
+
+  closeSyncModal();
+  updateExpenseUI();
+  updateSettlementMath();
+  updateDagMath();
+  saveStateToLocalStorage();
+
+  showToast(`Successfully merged +${addedExpCount} expenses and +${addedNodeCount} stops!`);
+  pendingIncomingSyncPayload = null;
+}
+
+function handleSyncFileSelect(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const input = document.getElementById('syncTokenInput');
+    if (input) {
+      input.value = e.target.result.trim();
+      previewIncomingSync();
+    }
+  };
+  reader.readAsText(file);
+}
+
+

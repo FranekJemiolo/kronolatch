@@ -42,6 +42,7 @@ from kronolatch.sheets import (
     parse_expenses_csv,
     parse_itinerary_csv,
 )
+from kronolatch.sync import SyncEngine
 from kronolatch.verifier import verify_vendor_url
 
 app = typer.Typer(
@@ -881,6 +882,83 @@ def live_delay(
         f"{status.source} ({'LIVE HTTP' if status.is_live else 'OFFLINE CACHE'})",
     )
     console.print(table)
+
+
+@app.command("share")
+def share(
+    trip_file: Optional[str] = typer.Option(
+        None, "--trip", "-t", help="Path to local trip JSON file"
+    ),
+    sender: str = typer.Option("Traveler", "--sender", "-s", help="Your name as sender"),
+    sync_type: str = typer.Option(
+        "all", "--type", help="Scope of synchronization: 'all', 'expenses', or 'itinerary'"
+    ),
+):
+    """Generate an offline compressed P2P sync token to share expenses and stops with companions."""
+    trip = load_or_create_sample_dag(trip_file)
+    scope = "all" if sync_type not in ("all", "expenses", "itinerary") else sync_type
+    payload = SyncEngine.create_payload_from_trip(trip, sender=sender, sync_type=scope)
+    token = SyncEngine.encode_token(payload)
+
+    console.print(
+        Panel.fit(
+            f"[bold cyan]KronoLatch Offline Peer-to-Peer Sync Token[/bold cyan]\n\n"
+            f"[dim]Sender:[/dim] {sender} | [dim]Scope:[/dim] {scope.upper()} | [dim]Trip ID:[/dim] {payload.trip_id}\n"
+            f"[dim]Bundled Entities:[/dim] {len(payload.expenses)} expenses, {len(payload.nodes)} itinerary stops\n\n"
+            f"[bold green]{token}[/bold green]\n\n"
+            f"[dim]Pass this token to your travel companion or import it via:[/dim]\n"
+            f'[white]uv run kronolatch sync "{token[:24]}..."[/white]',
+            border_style="cyan",
+        )
+    )
+
+
+@app.command("sync")
+def sync(
+    token_or_file: str = typer.Argument(
+        ..., help="Compressed sync token string or path to a file containing the token"
+    ),
+    trip_file: Optional[str] = typer.Option(
+        None, "--trip", "-t", help="Path to local trip JSON to merge into"
+    ),
+    out_file: Optional[str] = typer.Option(
+        None, "--out", "-o", help="Target path for updated trip JSON"
+    ),
+):
+    """Merge an incoming offline sync token into your local trip DAG without duplicating expenses."""
+    content = token_or_file.strip()
+    if len(content) < 255:
+        try:
+            p = Path(content)
+            if p.is_file():
+                content = p.read_text(encoding="utf-8").strip()
+        except (OSError, ValueError):
+            pass
+
+    try:
+        incoming = SyncEngine.decode_token(content)
+    except Exception as exc:
+        console.print(f"[bold red]Sync decode error:[/bold red] {exc}")
+        raise typer.Exit(1)
+
+    trip = load_or_create_sample_dag(trip_file)
+    updated_trip, stats = SyncEngine.merge_into_trip(incoming, trip)
+
+    target = (
+        Path(out_file) if out_file else (Path(trip_file) if trip_file else Path("merged-trip.json"))
+    )
+    target.write_text(json.dumps(updated_trip.model_dump(mode="json"), indent=2), encoding="utf-8")
+
+    console.print(
+        Panel.fit(
+            f"[bold green]✓ Peer Sync Complete[/bold green]\n\n"
+            f"[dim]Received from:[/dim] {incoming.sender} ([dim]Trip:[/dim] {incoming.trip_id})\n"
+            f"[bold white]+{stats['new_expenses']} new expenses[/bold white] merged (Total: {stats['total_expenses']})\n"
+            f"[bold white]+{stats['new_nodes']} new itinerary stops[/bold white] merged (Total: {stats['total_nodes']})\n\n"
+            f"[dim]Saved updated trip DAG to:[/dim] [white]{target}[/white]",
+            border_style="green",
+        )
+    )
 
 
 @app.command()

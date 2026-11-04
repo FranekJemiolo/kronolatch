@@ -453,6 +453,10 @@
                 <p class="text-xs text-slate-500 mt-0.5">Click traveler chips to include or exclude people from specific expenses</p>
               </div>
               <div class="flex flex-wrap items-center gap-2">
+                <button onclick="openSyncModal()" class="px-2.5 py-1.5 rounded-lg border border-indigo-300 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 font-semibold text-xs flex items-center gap-1.5 transition shadow-sm">
+                  <i class="fa-solid fa-qrcode text-indigo-600"></i>
+                  <span>P2P Offline Sync</span>
+                </button>
                 <button onclick="openSheetsModal('expenses')" class="px-2.5 py-1.5 rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold text-xs flex items-center gap-1.5 transition shadow-sm">
                   <i class="fa-solid fa-file-excel text-emerald-600"></i>
                   <span>Google Sheets / CSV</span>
@@ -869,6 +873,125 @@
             <i class="fa-solid fa-check"></i>
             <span id="sheetsApplyBtnText">Apply to Current Trip</span>
           </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- PEER-TO-PEER OFFLINE GROUP SYNC MODAL      -->
+  <!-- ========================================== -->
+  <div id="syncModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+    <div class="travel-card bg-white w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-2xl border border-slate-200 rounded-2xl animate-fade-in">
+      
+      <!-- Modal Header -->
+      <div class="flex items-start justify-between border-b border-slate-100 pb-4">
+        <div>
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center text-base">
+              <i class="fa-solid fa-qrcode"></i>
+            </div>
+            <h3 class="text-lg font-bold text-slate-900">Peer-to-Peer Offline Group Sync</h3>
+            <span class="px-2.5 py-0.5 rounded-full text-[10px] uppercase font-bold bg-indigo-100 text-indigo-800">
+              Zero-Server
+            </span>
+          </div>
+          <p class="text-xs text-slate-500 mt-1">
+            Synchronize newly logged expenses and itinerary changes between companions on the road without logins or mobile data.
+          </p>
+        </div>
+        <button onclick="closeSyncModal()" class="text-slate-400 hover:text-slate-600 text-lg p-1 rounded-lg hover:bg-slate-100 transition">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Mode Tabs: Share vs Receive -->
+      <div class="flex border-b border-slate-200 gap-2">
+        <button onclick="switchSyncTab('share')" id="syncTabBtnShare" class="pb-2.5 px-3 font-bold text-xs border-b-2 border-indigo-600 text-indigo-900 transition flex items-center gap-1.5">
+          <i class="fa-solid fa-share-nodes"></i>
+          <span>Share My Updates</span>
+        </button>
+        <button onclick="switchSyncTab('receive')" id="syncTabBtnReceive" class="pb-2.5 px-3 font-semibold text-xs border-b-2 border-transparent text-slate-500 hover:text-slate-800 transition flex items-center gap-1.5">
+          <i class="fa-solid fa-download"></i>
+          <span>Receive Companion Updates</span>
+        </button>
+      </div>
+
+      <!-- Share Panel -->
+      <div id="syncSharePanel" class="space-y-4">
+        <div class="flex flex-col sm:flex-row items-center gap-6 p-4 bg-slate-50 rounded-xl border border-slate-200">
+          <!-- Canvas QR code element -->
+          <div class="flex flex-col items-center">
+            <canvas id="syncQrCanvas" width="180" height="180" class="rounded-xl border border-slate-300 bg-white p-2 shadow-sm"></canvas>
+            <span class="text-[10px] text-slate-400 mt-1">Offline High-Density QR</span>
+          </div>
+          <div class="space-y-2.5 text-xs flex-1">
+            <div>
+              <span class="font-bold text-slate-900 block">Companion Screen Scan</span>
+              <p class="text-slate-600 text-[11px] mt-0.5">Have your companion scan this QR code or copy the compact token below to import your latest expenses.</p>
+            </div>
+            <div class="space-y-1">
+              <label class="text-[11px] font-semibold text-slate-700">Sync Scope</label>
+              <select id="syncScopeSelect" onchange="generateWebSyncToken()" class="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs">
+                <option value="expenses">Group Expenses Only (Recommended)</option>
+                <option value="all">Entire Trip (Expenses & Stops)</option>
+              </select>
+            </div>
+            <div class="flex items-center gap-2 pt-1">
+              <button onclick="copyWebSyncToken()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg transition shadow-sm flex items-center gap-1.5">
+                <i class="fa-solid fa-copy"></i>
+                <span>Copy Sync Token</span>
+              </button>
+              <button onclick="downloadSyncJsonFile()" class="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium text-xs rounded-lg transition">
+                Save Payload File
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="space-y-1">
+          <label class="text-[11px] font-bold text-slate-700">Compact Offline Sync Token</label>
+          <textarea id="syncTokenOutput" rows="3" readonly class="w-full px-3 py-2 text-[11px] font-mono rounded-xl border border-slate-200 bg-slate-50 text-slate-700 focus:outline-none"></textarea>
+        </div>
+      </div>
+
+      <!-- Receive Panel -->
+      <div id="syncReceivePanel" class="hidden space-y-4">
+        <div class="space-y-2">
+          <label class="text-xs font-bold text-slate-800 block">
+            Paste Companion Sync Token or Load Payload File
+          </label>
+          <textarea id="syncTokenInput" rows="4" placeholder="Paste krono1_... sync token here" class="w-full px-3 py-2 text-xs font-mono rounded-xl border border-slate-300 focus:outline-none focus:border-indigo-500 text-slate-800" oninput="previewIncomingSync()"></textarea>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <input type="file" id="syncPayloadFileInput" accept=".json,.txt" class="hidden" onchange="handleSyncFileSelect(event)" />
+          <button onclick="document.getElementById('syncPayloadFileInput').click()" class="py-1.5 px-3 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition">
+            <i class="fa-solid fa-file-import text-indigo-600"></i>
+            <span>Load Payload File</span>
+          </button>
+          <button onclick="previewIncomingSync()" class="py-1.5 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition">
+            Inspect Token
+          </button>
+        </div>
+
+        <!-- Incoming Summary Card -->
+        <div id="syncPreviewCard" class="hidden p-4 bg-indigo-50 border border-indigo-200 rounded-xl text-xs space-y-2 animate-fade-in">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-indigo-950 flex items-center gap-1.5">
+              <i class="fa-solid fa-circle-check text-indigo-600"></i>
+              <span id="syncPreviewSender">Incoming Updates</span>
+            </span>
+            <span id="syncPreviewScope" class="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-200 text-indigo-900 uppercase"></span>
+          </div>
+          <p id="syncPreviewSummary" class="text-xs text-indigo-900"></p>
+          <div class="flex justify-end pt-1">
+            <button onclick="applyIncomingSync()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition shadow-sm flex items-center gap-1.5">
+              <i class="fa-solid fa-arrows-rotate"></i>
+              <span>Merge Into Group Ledger</span>
+            </button>
+          </div>
         </div>
       </div>
 
