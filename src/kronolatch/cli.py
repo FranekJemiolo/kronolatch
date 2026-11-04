@@ -23,6 +23,7 @@ from rich.table import Table
 from kronolatch.dag_engine import calculate_transition_time, optimize_and_cut, validate_dag
 from kronolatch.ingest import TicketIngestor
 from kronolatch.ledger import settle_expenses
+from kronolatch.live_transit import LiveTransitClient
 from kronolatch.models import (
     Category,
     DAGParameters,
@@ -213,11 +214,32 @@ def validate(
     auto_cut: bool = typer.Option(
         False, "--auto-cut", help="Automatically compress/trim flexible stops if conflicts detected"
     ),
+    live_delays: bool = typer.Option(
+        False,
+        "--live-delays",
+        "-l",
+        help="Query live public railway feeds for real-time train delays",
+    ),
 ):
     """Audits an itinerary's temporal DAG, calculates dynamic leeway, and flags hard conflicts."""
     trip = load_or_create_sample_dag(trip_file)
 
     delays = {}
+    if live_delays:
+        console.print("[dim]Querying real-time public railway delay feeds...[/dim]")
+        rail_statuses = LiveTransitClient.check_trip_rail_delays(trip)
+        for nid, st in rail_statuses.items():
+            if st.delay_minutes > 0:
+                delays[nid] = st.delay_minutes
+                console.print(
+                    f"  [bold yellow]• Live Alert:[/bold yellow] Train {st.train_number} delayed [bold red]+{st.delay_minutes}m[/bold red] ({st.status_summary}) [{st.source}]"
+                )
+            else:
+                console.print(
+                    f"  [bold green]• Live Status:[/bold green] Train {st.train_number} is [bold green]{st.status_summary}[/bold green]"
+                )
+        console.print()
+
     if inject_delay:
         parts = inject_delay.split(":")
         if len(parts) == 2:
@@ -816,6 +838,49 @@ def ingest_ticket(
         console.print(
             f"[bold green]✓ Appended node '{node_id}' to trip DAG and saved to {target_path}[/bold green]"
         )
+
+
+@app.command("live-delay")
+def live_delay(
+    train: str = typer.Argument(
+        ..., help="Train number or service identifier (e.g. 9540, 3305, or 'Frecciarossa 9540')"
+    ),
+):
+    """Query live train delay telemetry from public railway feeds (ViaggiaTreno open data)."""
+    status = LiveTransitClient.fetch_train_delay(train)
+    table = Table(
+        title=f"[bold green]Live Train Telemetry — {status.train_number}[/bold green]",
+        show_header=True,
+        header_style="bold cyan",
+    )
+    table.add_column("Property", style="bold white", width=22)
+    table.add_column("Status", style="green")
+
+    table.add_row("Service Identifier", status.train_number)
+    table.add_row("Operator", status.operator)
+    if status.origin_station:
+        table.add_row("Origin", status.origin_station)
+    if status.destination_station:
+        table.add_row("Destination", status.destination_station)
+    delay_style = (
+        "bold red"
+        if status.delay_minutes > 10
+        else ("bold yellow" if status.delay_minutes > 0 else "bold green")
+    )
+    table.add_row(
+        "Current Delay",
+        (
+            f"[{delay_style}]+{status.delay_minutes} min[/{delay_style}]"
+            if status.delay_minutes > 0
+            else "[bold green]0 min (On Time)[/bold green]"
+        ),
+    )
+    table.add_row("Status Summary", status.status_summary)
+    table.add_row(
+        "Data Source",
+        f"{status.source} ({'LIVE HTTP' if status.is_live else 'OFFLINE CACHE'})",
+    )
+    console.print(table)
 
 
 @app.command()

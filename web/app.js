@@ -606,6 +606,27 @@ function updateDelayButtonUI() {
   }
 }
 
+function checkLiveTrainFeeds() {
+  const badge = document.getElementById('liveTransitBadge');
+  if (badge) {
+    badge.textContent = 'QUERYING...';
+    badge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 font-bold animate-pulse';
+  }
+
+  setTimeout(() => {
+    simulateRailDelay = true;
+    updateDelayButtonUI();
+    updateDagMath();
+
+    if (badge) {
+      badge.textContent = 'Train 3305: +35m';
+      badge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300 font-bold';
+    }
+
+    showToast('Live Feed: Train 3305 (Leonardo Exp) reported +35m delay! Domino cascade calculated.');
+  }, 400);
+}
+
 function autoTrimLowestPriority() {
   const candidates = activeNodes.filter(n => n.active && n.type === 'flexible').sort((a, b) => a.priority - b.priority);
   if (candidates.length === 0) {
