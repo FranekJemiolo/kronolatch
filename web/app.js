@@ -568,6 +568,8 @@ function updateDagMath() {
 
     delayBanner.classList.add('hidden');
   }
+
+  saveStateToLocalStorage();
 }
 
 function toggleNodeActive(nodeId) {
@@ -717,51 +719,132 @@ function loadVerifierPreset(key) {
   inspectCustomUrl();
 }
 
+const TRUSTED_AGGREGATORS = [
+  'trainline.com',
+  'booking.com',
+  'skyscanner.net',
+  'skyscanner.com',
+  'omio.com',
+  'trenitalia.com',
+  'italotreno.it',
+  'intercity.pl',
+  'oebb.at',
+  'sncf-connect.com',
+  'bahn.de',
+  'getyourguide.com',
+  'tiqets.com',
+  'expedia.com',
+  'tripadvisor.com'
+];
+
+const DECEPTIVE_TOKENS = [
+  '-tickets',
+  '-ticket',
+  '-booking',
+  '-official',
+  '-rome',
+  '-paris',
+  '-florence',
+  '-fast-track',
+  '-entry',
+  'tickets-',
+  'official-',
+  'buy-',
+  'skip-the-line'
+];
+
+function normalizeRootDomain(rawUrl) {
+  if (!rawUrl) return '';
+  let cleaned = rawUrl.trim().toLowerCase();
+  if (!cleaned.startsWith('http://') && !cleaned.startsWith('https://')) {
+    cleaned = 'https://' + cleaned;
+  }
+  try {
+    const parsed = new URL(cleaned);
+    let host = parsed.hostname;
+    if (host.startsWith('www.')) host = host.slice(4);
+    const parts = host.split('.');
+    if (parts.length >= 2) {
+      const secondTlds = ['co', 'com', 'org', 'net', 'edu', 'gov'];
+      if (parts.length >= 3 && secondTlds.includes(parts[parts.length - 2])) {
+        return parts.slice(-3).join('.');
+      }
+      return parts.slice(-2).join('.');
+    }
+    return host;
+  } catch (e) {
+    return cleaned.split('/')[0].replace(/^www\./, '');
+  }
+}
+
 function inspectCustomUrl() {
-  const raw = document.getElementById('urlVerifyInput').value.trim().toLowerCase();
+  const raw = document.getElementById('urlVerifyInput').value.trim();
   const box = document.getElementById('liveAuditResultBox');
-
-  let matched = vendorDatabase.find(v =>
-    raw.includes(v.key) ||
-    raw.includes(v.trapDomain.split('.')[0]) ||
-    raw.includes(v.officialDomain.split('/')[0]) ||
-    (v.key === 'rail' && (raw.includes('trenitalia') || raw.includes('pkp') || raw.includes('intercity') || raw.includes('italia')))
-  );
-
-  if (!matched) {
-    matched = vendorDatabase[0];
+  if (!raw) {
+    box.innerHTML = '';
+    return;
   }
 
-  const isOfficialMatch = raw.includes(matched.officialDomain.split('/')[0].trim());
+  const candidateRoot = normalizeRootDomain(raw);
 
-  if (isOfficialMatch) {
+  // Check if candidate matches any known venue in our ground-truth database
+  const matched = vendorDatabase.find(v => {
+    const officialRoot = normalizeRootDomain(v.officialDomain);
+    const trapRoot = normalizeRootDomain(v.trapDomain);
+    return candidateRoot === officialRoot || candidateRoot === trapRoot || raw.toLowerCase().includes(v.key);
+  });
+
+  const isTrustedAggregator = TRUSTED_AGGREGATORS.some(t => candidateRoot === t || candidateRoot.endsWith('.' + t));
+
+  if (matched && candidateRoot === normalizeRootDomain(matched.officialDomain)) {
+    // Official Domain Match
     box.className = 'p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mt-2';
     box.innerHTML = `
       <div class="space-y-1">
         <div class="flex items-center gap-2">
-          <span class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-600 text-white">VERIFIED OFFICIAL VENUE</span>
+          <span class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-600 text-white">VERIFIED OFFICIAL PORTAL</span>
           <span class="text-xs font-bold text-emerald-900">${matched.venue}</span>
         </div>
-        <p class="text-xs text-slate-700">Root domain matches authoritative ground truth on Google Maps & Wikidata (${matched.wikidataId}). Base Ticket Fare: <strong>${matched.officialPrice}</strong>.</p>
+        <p class="text-xs text-slate-700">Root domain <code class="font-bold text-emerald-800">${candidateRoot}</code> matches authoritative ground truth on Google Maps & Wikidata (${matched.wikidataId}). Base Ticket Fare: <strong>${matched.officialPrice}</strong>.</p>
       </div>
       <a href="${matched.officialUrl}" target="_blank" rel="noopener noreferrer" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shrink-0 transition shadow-sm">
         Book on Official Portal ↗
       </a>
     `;
+  } else if (isTrustedAggregator) {
+    // Whitelisted Aggregator Match
+    box.className = 'p-4 rounded-xl bg-blue-50 border border-blue-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mt-2';
+    box.innerHTML = `
+      <div class="space-y-1">
+        <div class="flex items-center gap-2">
+          <span class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-blue-600 text-white">TRUSTED AGGREGATOR</span>
+          <span class="text-xs font-bold text-blue-900">${candidateRoot}</span>
+        </div>
+        <p class="text-xs text-slate-700">Root domain is on the verified whitelist of legitimate ticketing platforms (Trainline, Skyscanner, Booking, Trenitalia). Always check for booking fees.</p>
+      </div>
+      <a href="${raw.startsWith('http') ? raw : 'https://' + raw}" target="_blank" rel="noopener noreferrer" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shrink-0 transition shadow-sm">
+        Open Portal ↗
+      </a>
+    `;
   } else {
+    // Flag deceptive tokens / mismatch
+    const hasDeceptiveToken = DECEPTIVE_TOKENS.some(tok => candidateRoot.includes(tok));
+    const targetVenue = matched || vendorDatabase[0];
+
     box.className = 'p-4 rounded-xl bg-rose-50 border border-rose-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mt-2';
     box.innerHTML = `
       <div class="space-y-1">
         <div class="flex items-center gap-2">
-          <span class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-rose-600 text-white">HIGH-RISK RESELLER CLONE DETECTED</span>
-          <span class="text-xs font-bold text-rose-900">Target: ${matched.venue}</span>
+          <span class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-rose-600 text-white">${hasDeceptiveToken ? 'HIGH-RISK RESELLER CLONE DETECTED' : 'UNVERIFIED THIRD-PARTY LINK'}</span>
+          <span class="text-xs font-bold text-rose-900">Target: ${targetVenue.venue}</span>
         </div>
         <p class="text-xs text-slate-700">
-          Domain <code class="text-rose-800 font-mono font-semibold">${raw}</code> <strong>DOES NOT MATCH</strong> official ground truth (<code class="text-emerald-700 font-mono font-semibold">${matched.officialDomain}</code>). Typical markup: <strong>${matched.trapMarkup}</strong>.
+          Candidate root domain <code class="text-rose-800 font-mono font-bold">${candidateRoot}</code> <strong>does not match</strong> official ground truth (<code class="text-emerald-700 font-mono font-bold">${targetVenue.officialDomain}</code>).
+          ${hasDeceptiveToken ? `<br><span class="text-rose-700 font-medium">⚠️ Flagged deceptive keyword pattern used by search ad traps. Typical markup: <strong>${targetVenue.trapMarkup}</strong>.</span>` : ''}
         </p>
       </div>
-      <a href="${matched.officialUrl}" target="_blank" rel="noopener noreferrer" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shrink-0 transition shadow-sm">
-        Redirect to Official Portal (${matched.officialDomain}) ↗
+      <a href="${targetVenue.officialUrl}" target="_blank" rel="noopener noreferrer" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shrink-0 transition shadow-sm">
+        Redirect to Official Portal (${targetVenue.officialDomain}) ↗
       </a>
     `;
   }
@@ -886,6 +969,8 @@ function renderLedger() {
       transContainer.appendChild(item);
     });
   }
+
+  saveStateToLocalStorage();
 }
 
 function toggleExpenseParticipant(expId, person) {
@@ -932,12 +1017,13 @@ function removeLedgerExpense(id) {
 // -------------------------------------------------------------------
 function setStudioTarget(target) {
   currentStudioTarget = target;
-  ['gemini', 'antigravity', 'cursor', 'cli'].forEach(t => {
+  ['gemini', 'antigravity', 'cursor', 'cli', 'json'].forEach(t => {
     const btn = document.getElementById(`target-btn-${t}`);
+    if (!btn) return;
     if (t === target) {
-      btn.className = 'p-3 rounded-xl border border-sky-500 bg-sky-50 text-sky-900 font-semibold text-left transition';
+      btn.className = 'p-2.5 rounded-xl border border-sky-500 bg-sky-50 text-sky-900 font-semibold text-left transition';
     } else {
-      btn.className = 'p-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 font-semibold text-left transition';
+      btn.className = 'p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 font-semibold text-left transition';
     }
   });
   renderStudioArtifact();
@@ -1007,6 +1093,48 @@ ${modSplit ? `## 4. MULTI-CURRENCY GROUP SPLITTER
 - Maintain deterministic DAG engine invariants (no zero-buffer transitions).
 - Strip domains to canonical eTLD+1 before auditing ticket URLs.
 - Always run \`uv run pytest\` and \`uv run kronolatch self-test\` before committing.`;
+
+  } else if (currentStudioTarget === 'json') {
+    filename = 'trip-dag.json';
+    const tripObj = {
+      $schema: "./schemas/trip-dag.schema.json",
+      trip_id: currentTripPreset === 'rome' ? 'rome-florence-2026' : 'alpine-loop-2026',
+      title: `${dest} (${group})`,
+      destination: dest,
+      base_currency: "EUR",
+      travelers: travelers,
+      parameters: {
+        risk_multiplier: parseInt(riskPct, 10) / 100,
+        hub_overhead_minutes: parseInt(hubMin, 10)
+      },
+      nodes: activeNodes.map(n => ({
+        id: n.id,
+        title: n.title,
+        type: n.type,
+        category: n.category,
+        transit_mode: n.transitMode || 'walk',
+        transit_min: n.transitMin || 0,
+        duration_min: n.durationMin,
+        min_duration_min: n.minDurationMin,
+        fixed_start_time: n.fixedStartMin !== null ? formatMinToTime(n.fixedStartMin) : null,
+        priority: n.priority || 5,
+        official_domain: n.officialDomain || null,
+        pnr: n.pnr || null,
+        notes: n.notes || null,
+        active: n.active !== false
+      })),
+      expenses: ledgerExpenses.map(e => ({
+        id: e.id,
+        title: e.title,
+        payer: e.payer,
+        amount: e.amount,
+        currency: e.currency,
+        exchange_rate_to_base: e.currency === 'PLN' ? 4.30 : 1.0,
+        participants: e.participants,
+        node_id: e.nodeId || null
+      }))
+    };
+    content = JSON.stringify(tripObj, null, 2);
 
   } else {
     filename = 'kronolatch.py';
@@ -1167,15 +1295,199 @@ function runAllManualTests() {
 }
 
 // -------------------------------------------------------------------
+// 10. LOCAL STORAGE PERSISTENCE & BYOK SETTINGS
+// -------------------------------------------------------------------
+function saveStateToLocalStorage() {
+  try {
+    localStorage.setItem('kronolatch_active_nodes', JSON.stringify(activeNodes));
+    localStorage.setItem('kronolatch_ledger_expenses', JSON.stringify(ledgerExpenses));
+    const riskVal = document.getElementById('riskSlider')?.value;
+    const hubVal = document.getElementById('hubSlider')?.value;
+    if (riskVal) localStorage.setItem('kronolatch_risk_multiplier', riskVal);
+    if (hubVal) localStorage.setItem('kronolatch_hub_overhead', hubVal);
+    updateStorageStatusDisplay();
+  } catch (e) {
+    console.warn('localStorage save failed:', e);
+  }
+}
+
+function loadStateFromLocalStorage() {
+  try {
+    const savedNodes = localStorage.getItem('kronolatch_active_nodes');
+    if (savedNodes) {
+      const parsed = JSON.parse(savedNodes);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        activeNodes = parsed;
+      }
+    }
+
+    const savedExpenses = localStorage.getItem('kronolatch_ledger_expenses');
+    if (savedExpenses) {
+      const parsed = JSON.parse(savedExpenses);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        ledgerExpenses = parsed;
+      }
+    }
+
+    const savedRisk = localStorage.getItem('kronolatch_risk_multiplier');
+    if (savedRisk && document.getElementById('riskSlider')) {
+      document.getElementById('riskSlider').value = savedRisk;
+    }
+
+    const savedHub = localStorage.getItem('kronolatch_hub_overhead');
+    if (savedHub && document.getElementById('hubSlider')) {
+      document.getElementById('hubSlider').value = savedHub;
+    }
+
+    const savedKey = localStorage.getItem('kronolatch_byok_api_key');
+    if (savedKey && document.getElementById('byokApiKeyInput')) {
+      document.getElementById('byokApiKeyInput').value = savedKey;
+      const badge = document.getElementById('byokKeyStatusBadge');
+      if (badge) badge.textContent = '✓ Saved in browser';
+    }
+
+    updateStorageStatusDisplay();
+  } catch (e) {
+    console.warn('localStorage load failed:', e);
+  }
+}
+
+function updateStorageStatusDisplay() {
+  const stopsEl = document.getElementById('storageStopsCount');
+  const expEl = document.getElementById('storageExpensesCount');
+  if (stopsEl) stopsEl.textContent = `${activeNodes.length} stops`;
+  if (expEl) expEl.textContent = `${ledgerExpenses.length} items`;
+}
+
+function resetStateToDefaults() {
+  localStorage.removeItem('kronolatch_active_nodes');
+  localStorage.removeItem('kronolatch_ledger_expenses');
+  localStorage.removeItem('kronolatch_risk_multiplier');
+  localStorage.removeItem('kronolatch_hub_overhead');
+
+  activeNodes = JSON.parse(JSON.stringify(tripPresets[currentTripPreset].nodes));
+  ledgerExpenses = [
+    { id: 'e1', title: 'Ryanair Flights WMI → FCO (4 Pax)', payer: 'Franek', amount: 340, currency: 'EUR', participants: ['Franek', 'Anna', 'Marek', 'Kasia'] },
+    { id: 'e2', title: 'Colosseum Official Tickets (ticketing.colosseo.it)', payer: 'Anna', amount: 96, currency: 'EUR', participants: ['Franek', 'Anna', 'Marek', 'Kasia'] },
+    { id: 'e3', title: 'Frecciarossa Rail Tickets (Train Subgroup Only)', payer: 'Marek', amount: 90, currency: 'EUR', participants: ['Marek', 'Kasia'] },
+    { id: 'e4', title: 'Tuscany Rental Car & Autostrada Fuel (Car Subgroup)', payer: 'Franek', amount: 160, currency: 'EUR', participants: ['Franek', 'Anna'] },
+    { id: 'e5', title: 'Modlin Airport Parking (Poland, 4 Pax)', payer: 'Kasia', amount: 258, currency: 'PLN', participants: ['Franek', 'Anna', 'Marek', 'Kasia'] }
+  ];
+
+  if (document.getElementById('riskSlider')) document.getElementById('riskSlider').value = 20;
+  if (document.getElementById('hubSlider')) document.getElementById('hubSlider').value = 15;
+
+  updateDagMath();
+  renderLedger();
+  updateStorageStatusDisplay();
+  closeSettingsModal();
+  showToast('Reset to demo baseline tour defaults');
+}
+
+function openSettingsModal() {
+  updateStorageStatusDisplay();
+  const modal = document.getElementById('settingsModal');
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+}
+
+function closeSettingsModal() {
+  const modal = document.getElementById('settingsModal');
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+}
+
+function saveByokApiKey() {
+  const input = document.getElementById('byokApiKeyInput');
+  const key = input.value.trim();
+  if (!key) {
+    clearByokApiKey();
+    return;
+  }
+  localStorage.setItem('kronolatch_byok_api_key', key);
+  document.getElementById('byokKeyStatusBadge').textContent = '✓ Saved in browser';
+  showToast('BYOK API Key saved securely to localStorage');
+}
+
+function clearByokApiKey() {
+  localStorage.removeItem('kronolatch_byok_api_key');
+  document.getElementById('byokApiKeyInput').value = '';
+  document.getElementById('byokKeyStatusBadge').textContent = '';
+  showToast('BYOK API Key cleared');
+}
+
+function exportTripJsonFile() {
+  const tripObj = {
+    trip_id: currentTripPreset === 'rome' ? 'rome-florence-2026' : 'alpine-loop-2026',
+    title: currentTripPreset === 'rome' ? 'Rome & Florence Express' : 'Central Europe Alpine Loop',
+    destination: currentTripPreset === 'rome' ? 'Rome & Florence, Italy' : 'Vienna & Salzburg',
+    base_currency: 'EUR',
+    travelers: travelers,
+    parameters: {
+      risk_multiplier: (parseInt(document.getElementById('riskSlider').value, 10) || 20) / 100,
+      hub_overhead_minutes: parseInt(document.getElementById('hubSlider').value, 10) || 15
+    },
+    nodes: activeNodes.map(n => ({
+      id: n.id,
+      title: n.title,
+      type: n.type,
+      category: n.category,
+      transit_mode: n.transitMode || 'walk',
+      transit_min: n.transitMin || 0,
+      duration_min: n.durationMin,
+      min_duration_min: n.minDurationMin,
+      fixed_start_time: n.fixedStartMin !== null ? formatMinToTime(n.fixedStartMin) : null,
+      priority: n.priority || 5,
+      official_domain: n.officialDomain || null,
+      pnr: n.pnr || null,
+      notes: n.notes || null,
+      active: n.active !== false
+    })),
+    expenses: ledgerExpenses.map(e => ({
+      id: e.id,
+      title: e.title,
+      payer: e.payer,
+      amount: e.amount,
+      currency: e.currency,
+      exchange_rate_to_base: e.currency === 'PLN' ? 4.30 : 1.0,
+      participants: e.participants,
+      node_id: e.nodeId || null
+    }))
+  };
+
+  const jsonStr = JSON.stringify(tripObj, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'trip-dag.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('Downloaded trip-dag.json!');
+}
+
+// -------------------------------------------------------------------
 // 11. INITIALIZATION ON WINDOW LOAD
 // -------------------------------------------------------------------
 window.onload = function () {
+  loadStateFromLocalStorage();
   updateDagMath();
   renderVerifierCards();
   inspectCustomUrl();
   renderLedger();
   renderStudioArtifact();
   renderManualTests();
+
+  // Register Service Worker for offline-first PWA caching
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').then(() => {
+      console.log('KronoLatch Service Worker registered');
+    }).catch(err => {
+      console.warn('Service Worker registration skipped:', err);
+    });
+  }
 
   // Support direct tab linking via URL hash (e.g. #verifier, #ledger, #studio)
   const hash = window.location.hash.replace('#', '');

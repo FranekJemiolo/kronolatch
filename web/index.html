@@ -65,6 +65,11 @@
           <i class="fa-solid fa-moon"></i>
         </button>
 
+        <!-- Storage & BYOK Settings Button -->
+        <button onclick="openSettingsModal()" id="settingsModalBtn" title="BYOK API Key & Storage Settings" class="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 text-sm transition">
+          <i class="fa-solid fa-gear"></i>
+        </button>
+
         <!-- Quick AI Skill Button -->
         <button onclick="switchTab('studio')" class="text-xs font-semibold px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white shadow-sm transition flex items-center gap-1.5">
           <i class="fa-solid fa-sparkles"></i>
@@ -522,25 +527,30 @@
             </h3>
 
             <!-- Tool Target Selector -->
-            <div class="grid grid-cols-2 gap-2 text-xs">
-              <button onclick="setStudioTarget('gemini')" id="target-btn-gemini" class="p-3 rounded-xl border border-sky-500 bg-sky-50 text-sky-900 font-semibold text-left transition">
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+              <button onclick="setStudioTarget('gemini')" id="target-btn-gemini" class="p-2.5 rounded-xl border border-sky-500 bg-sky-50 text-sky-900 font-semibold text-left transition">
                 <i class="fa-solid fa-gem mr-1.5 text-sky-600"></i> Gemini Gem
                 <span class="block text-[10px] font-normal text-slate-500 mt-0.5">Google Search grounded</span>
               </button>
               
-              <button onclick="setStudioTarget('antigravity')" id="target-btn-antigravity" class="p-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 font-semibold text-left transition">
+              <button onclick="setStudioTarget('antigravity')" id="target-btn-antigravity" class="p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 font-semibold text-left transition">
                 <i class="fa-solid fa-atom mr-1.5 text-indigo-600"></i> Antigravity IDE
                 <span class="block text-[10px] font-normal text-slate-500 mt-0.5">Agent workspace skill</span>
               </button>
               
-              <button onclick="setStudioTarget('cursor')" id="target-btn-cursor" class="p-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 font-semibold text-left transition">
+              <button onclick="setStudioTarget('cursor')" id="target-btn-cursor" class="p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 font-semibold text-left transition">
                 <i class="fa-solid fa-terminal mr-1.5 text-slate-700"></i> Cursor Rules
                 <span class="block text-[10px] font-normal text-slate-500 mt-0.5">.cursorrules file</span>
               </button>
               
-              <button onclick="setStudioTarget('cli')" id="target-btn-cli" class="p-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 font-semibold text-left transition">
+              <button onclick="setStudioTarget('cli')" id="target-btn-cli" class="p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 font-semibold text-left transition">
                 <i class="fa-brands fa-python mr-1.5 text-emerald-600"></i> Python CLI
                 <span class="block text-[10px] font-normal text-slate-500 mt-0.5">uv run kronolatch</span>
+              </button>
+
+              <button onclick="setStudioTarget('json')" id="target-btn-json" class="p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 font-semibold text-left transition sm:col-span-2">
+                <i class="fa-solid fa-file-code mr-1.5 text-amber-600"></i> trip-dag.json
+                <span class="block text-[10px] font-normal text-slate-500 mt-0.5">Draft-07 validated schema</span>
               </button>
             </div>
 
@@ -801,6 +811,89 @@
           <button onclick="applySheetsImport()" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
             <i class="fa-solid fa-check"></i>
             <span id="sheetsApplyBtnText">Apply to Current Trip</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- SETTINGS & BYOK API KEY MODAL             -->
+  <!-- ========================================== -->
+  <div id="settingsModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+    <div class="travel-card bg-white w-full max-w-xl max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-2xl border border-slate-200 rounded-2xl animate-fade-in">
+      
+      <!-- Modal Header -->
+      <div class="flex items-start justify-between border-b border-slate-100 pb-4">
+        <div>
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center text-base">
+              <i class="fa-solid fa-gear"></i>
+            </div>
+            <h3 class="text-lg font-bold text-slate-900">App Settings & Local Storage</h3>
+          </div>
+          <p class="text-xs text-slate-500 mt-1">
+            Offline-first configuration, optional Bring-Your-Own-Key (BYOK), and storage state.
+          </p>
+        </div>
+        <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-slate-600 text-lg p-1 rounded-lg hover:bg-slate-100 transition">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- BYOK API Key Section -->
+      <div class="space-y-3">
+        <div>
+          <label class="text-xs font-bold text-slate-800 flex items-center gap-2">
+            <i class="fa-solid fa-key text-sky-600"></i>
+            <span>Bring-Your-Own-Key (BYOK) API Key (Optional)</span>
+          </label>
+          <p class="text-[11px] text-slate-500 mt-0.5">
+            Store your personal Google Maps Places / Gemini API Key locally in your browser. Strictly never sent to any third-party server.
+          </p>
+        </div>
+        <input id="byokApiKeyInput" type="password" placeholder="AIzaSy... (Google Maps Places or Gemini API Key)" class="w-full px-3 py-2 text-xs font-mono rounded-xl border border-slate-300 focus:outline-none focus:border-sky-500" />
+        <div class="flex items-center gap-2">
+          <button onclick="saveByokApiKey()" class="px-4 py-1.5 bg-sky-600 hover:bg-sky-700 text-white font-semibold text-xs rounded-lg transition shadow-sm">
+            Save API Key
+          </button>
+          <button onclick="clearByokApiKey()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs rounded-lg transition">
+            Clear Key
+          </button>
+          <span id="byokKeyStatusBadge" class="text-[11px] text-slate-500 font-medium"></span>
+        </div>
+      </div>
+
+      <!-- Local Storage State & Management -->
+      <div class="pt-3 border-t border-slate-100 space-y-3">
+        <label class="text-xs font-bold text-slate-800 flex items-center gap-2">
+          <i class="fa-solid fa-hard-drive text-emerald-600"></i>
+          <span>Offline Local Storage Status</span>
+        </label>
+        <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-2">
+          <div class="flex justify-between text-slate-600">
+            <span>Saved Itinerary Stops:</span>
+            <span id="storageStopsCount" class="font-bold text-slate-900">6 stops</span>
+          </div>
+          <div class="flex justify-between text-slate-600">
+            <span>Saved Group Expenses:</span>
+            <span id="storageExpensesCount" class="font-bold text-slate-900">5 items</span>
+          </div>
+          <div class="flex justify-between text-slate-600">
+            <span>Offline PWA Service Worker:</span>
+            <span id="pwaStatusBadge" class="font-bold text-emerald-700">Active (v1)</span>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2 pt-1">
+          <button onclick="exportTripJsonFile()" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 text-xs font-semibold rounded-xl transition flex items-center gap-1.5">
+            <i class="fa-solid fa-download"></i>
+            <span>Export trip-dag.json</span>
+          </button>
+          <button onclick="resetStateToDefaults()" class="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-800 text-xs font-semibold rounded-xl transition flex items-center gap-1.5">
+            <i class="fa-solid fa-rotate-left"></i>
+            <span>Reset to Baseline Defaults</span>
           </button>
         </div>
       </div>
