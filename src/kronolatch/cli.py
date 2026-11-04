@@ -21,6 +21,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from kronolatch.dag_engine import calculate_transition_time, optimize_and_cut, validate_dag
+from kronolatch.ingest import TicketIngestor
 from kronolatch.ledger import settle_expenses
 from kronolatch.models import (
     Category,
@@ -753,6 +754,67 @@ def export_csv(
                 f"[dim]Tip: In Google Sheets, choose File → Import → Upload to load directly.[/dim]",
                 border_style="green",
             )
+        )
+
+
+@app.command("ingest-ticket")
+def ingest_ticket(
+    source: str = typer.Argument(
+        ..., help="Path to PDF ticket file or raw text confirmation snippet"
+    ),
+    trip_file: Optional[str] = typer.Option(
+        None, "--trip", "-t", help="Path to existing trip JSON to append the parsed node to"
+    ),
+    out_file: Optional[str] = typer.Option(
+        None, "--out", "-o", help="Output path for updated trip JSON"
+    ),
+):
+    """
+    Parse a travel ticket (PDF or raw confirmation text) deterministically
+    and extract PNR, timings, and carriage/seat assignments.
+    """
+    try:
+        parsed = TicketIngestor.parse(source)
+    except Exception as exc:
+        console.print(f"[bold red]Error parsing ticket source:[/bold red] {exc}")
+        raise typer.Exit(1)
+
+    table = Table(
+        title="[bold green]Parsed Ticket Details (Offline Ingestion)[/bold green]",
+        show_header=True,
+        header_style="bold cyan",
+    )
+    table.add_column("Property", style="bold white", width=22)
+    table.add_column("Extracted Value", style="green")
+
+    table.add_row("Service Category", parsed.service_type.value.upper())
+    table.add_row("Service / Train Number", parsed.service_number or "N/A")
+    table.add_row("PNR / Booking Reference", parsed.pnr or "[dim]Not detected[/dim]")
+    table.add_row("Origin Station", parsed.origin)
+    table.add_row("Destination Station", parsed.destination)
+    table.add_row("Departure Time", parsed.departure_time)
+    table.add_row("Arrival Time", parsed.arrival_time)
+    table.add_row("Duration", f"{parsed.duration_minutes()} min")
+    table.add_row("Carriage / Coach", parsed.coach_carriage or "N/A")
+    table.add_row("Seat Assignment", parsed.seat or "N/A")
+    if parsed.price is not None:
+        table.add_row("Ticket Price", f"{parsed.price:.2f} {parsed.currency}")
+    if parsed.date:
+        table.add_row("Travel Date", parsed.date)
+
+    console.print(table)
+
+    if trip_file:
+        trip = load_or_create_sample_dag(trip_file)
+        node_id = f"ticket_{len(trip.nodes) + 1}_{parsed.service_type.value}"
+        updated_trip = TicketIngestor.ingest_into_trip(source, trip, node_id=node_id)
+
+        target_path = Path(out_file) if out_file else Path(trip_file)
+        target_path.write_text(
+            json.dumps(updated_trip.model_dump(mode="json"), indent=2), encoding="utf-8"
+        )
+        console.print(
+            f"[bold green]✓ Appended node '{node_id}' to trip DAG and saved to {target_path}[/bold green]"
         )
 
 

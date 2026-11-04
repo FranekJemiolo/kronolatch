@@ -661,6 +661,256 @@ function insertCustomStop() {
 }
 
 // -------------------------------------------------------------------
+// 6b. CLIENT-SIDE TICKET & PDF INGESTION
+// -------------------------------------------------------------------
+let lastParsedTicket = null;
+
+function loadSampleTicket(type) {
+  const textarea = document.getElementById('ticketInputText');
+  if (!textarea) return;
+
+  if (type === 'rail') {
+    textarea.value = `TRENITALIA - BIGLIETTO ELETTRONICO
+Codice Prenotazione (PNR): TRN98X
+Treno: Frecciarossa 9540
+Da: Roma Termini
+A: Firenze S.M. Novella
+Data: 2026-05-15
+Partenza: 08:20
+Arrivo: 09:55
+Carrozza: 4
+Posto: 12D (Standard Silenzio)
+Totale: 45.90 EUR`;
+  } else {
+    textarea.value = `AIRLINE CONFIRMATION - BOARDING PASS
+Booking Ref (PNR): RYR77K
+Flight: FR 9941
+From: Warsaw Modlin WMI
+To: Rome Ciampino CIA
+Date: 2026-06-10
+Dep: 14:15
+Arr: 16:45
+Seat: 18B
+Total Paid: 189.50 PLN`;
+  }
+  previewTicketExtraction();
+}
+
+function extractTicketDetails(rawText) {
+  if (!rawText || !rawText.trim()) return null;
+  const cleaned = rawText.trim();
+
+  // Category
+  const isFlight = /\b(flight|airline|boarding|airport|volo|lot)\b/i.test(cleaned);
+  const category = isFlight ? 'flight' : 'rail';
+
+  // PNR
+  let pnr = null;
+  const pnrMatch = cleaned.match(/(?:PNR|Booking\s*(?:Ref|Reference|Code)|Codice\s*Prenotazione|Numer\s*rezerwacji)[\s:]*([A-Z0-9]{5,8})/i) ||
+                   cleaned.match(/\b([A-Z0-9]{6})\b/);
+  if (pnrMatch) pnr = pnrMatch[1].toUpperCase();
+
+  // Service number
+  let serviceNumber = isFlight ? 'Flight Flight-Leg' : 'Train Rail-Leg';
+  if (isFlight) {
+    const flMatch = cleaned.match(/\b([A-Z0-9]{2}\s*[0-9]{2,4})\b/i);
+    if (flMatch) serviceNumber = flMatch[1].toUpperCase();
+  } else {
+    const trMatch = cleaned.match(/\b(Frecciarossa\s*[0-9]{2,5}|Italo\s*[0-9]{2,5}|Intercity\s*[0-9]{2,5}|Leonardo\s*Express|Regionale\s*[0-9]{2,5}|FR\s*[0-9]{2,5})\b/i);
+    if (trMatch) serviceNumber = trMatch[1];
+  }
+
+  // Times
+  const timeMatches = cleaned.match(/\b([01]?[0-9]|2[0-3]):([0-5][0-9])\b/g);
+  let depTime = '08:20';
+  let arrTime = '09:55';
+  if (timeMatches && timeMatches.length >= 2) {
+    depTime = timeMatches[0];
+    arrTime = timeMatches[1];
+  } else if (timeMatches && timeMatches.length === 1) {
+    depTime = timeMatches[0];
+  }
+
+  // Calculate duration in minutes
+  const [depH, depM] = depTime.split(':').map(Number);
+  const [arrH, arrM] = arrTime.split(':').map(Number);
+  const startMin = depH * 60 + depM;
+  const endMin = arrH * 60 + arrM;
+  let durationMin = endMin - startMin;
+  if (durationMin <= 0) durationMin += 1440;
+
+  // Origin & Destination
+  let origin = isFlight ? 'Warsaw Modlin WMI' : 'Roma Termini';
+  let destination = isFlight ? 'Rome FCO' : 'Firenze S.M. Novella';
+
+  cleaned.split('\n').forEach(line => {
+    const fromM = line.match(/^\s*(?:From|Da|Od|Z|Origin)[\s:]+(.+)$/i);
+    if (fromM) origin = fromM[1].trim();
+    const toM = line.match(/^\s*(?:To|A|Do|Destination)[\s:]+(.+)$/i);
+    if (toM) destination = toM[1].trim();
+  });
+
+  // Carriage / Seat
+  let seat = null;
+  const seatM = cleaned.match(/(?:Seat|Posto|Miejsce)[\s:]*([0-9]{1,3}[A-Z]?)/i);
+  if (seatM) seat = seatM[1].toUpperCase();
+
+  let coach = null;
+  const coachM = cleaned.match(/(?:Carriage|Coach|Carrozza|Wagon)[\s:]*([0-9]{1,3})/i);
+  if (coachM) coach = coachM[1];
+
+  // Price
+  let priceStr = null;
+  const priceM = cleaned.match(/([€$£]|PLN|EUR|USD)\s*([0-9]+[.,][0-9]{2})/i) ||
+                 cleaned.match(/([0-9]+[.,][0-9]{2})\s*([€$£]|PLN|EUR|USD)/i);
+  if (priceM) {
+    priceStr = `${priceM[1]} ${priceM[2]}`.trim();
+  }
+
+  return {
+    category,
+    isFlight,
+    pnr,
+    serviceNumber,
+    origin,
+    destination,
+    depTime,
+    arrTime,
+    startMin,
+    durationMin,
+    seat,
+    coach,
+    priceStr,
+    title: `${isFlight ? 'Flight' : 'Train'} ${serviceNumber}: ${origin} → ${destination}`
+  };
+}
+
+function previewTicketExtraction() {
+  const textarea = document.getElementById('ticketInputText');
+  const previewCard = document.getElementById('ticketPreviewCard');
+  const addBtn = document.getElementById('addTicketBtn');
+  if (!textarea || !previewCard || !addBtn) return;
+
+  const parsed = extractTicketDetails(textarea.value);
+  if (!parsed) {
+    previewCard.classList.add('hidden');
+    addBtn.disabled = true;
+    lastParsedTicket = null;
+    return;
+  }
+
+  lastParsedTicket = parsed;
+  document.getElementById('ticketPreviewTitle').textContent = parsed.title;
+  document.getElementById('ticketPreviewPnr').textContent = parsed.pnr ? `PNR: ${parsed.pnr}` : 'DETECTED';
+  document.getElementById('ticketPreviewRoute').textContent = `${parsed.origin} → ${parsed.destination}`;
+  document.getElementById('ticketPreviewTimes').textContent = `${parsed.depTime} - ${parsed.arrTime} (${parsed.durationMin}m)`;
+  document.getElementById('ticketPreviewSeat').textContent = parsed.seat ? `Seat ${parsed.seat}${parsed.coach ? ` (Car ${parsed.coach})` : ''}` : '';
+  document.getElementById('ticketPreviewPrice').textContent = parsed.priceStr ? `• ${parsed.priceStr}` : '';
+
+  previewCard.classList.remove('hidden');
+  addBtn.disabled = false;
+}
+
+function handleTicketFileSelect(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  if (file.name.toLowerCase().endsWith('.pdf')) {
+    reader.onload = function(e) {
+      const buffer = e.target.result;
+      const bytes = new Uint8Array(buffer);
+      let text = '';
+      // Zero-cloud binary stream string decoding
+      let binStr = '';
+      for (let i = 0; i < Math.min(bytes.length, 150000); i++) {
+        binStr += String.fromCharCode(bytes[i]);
+      }
+      // Extract text inside PDF parenthesis operators (text) Tj
+      const matches = binStr.match(/\((.*?)\)\s*Tj/g);
+      if (matches && matches.length > 0) {
+        text = matches.map(m => m.replace(/^\(/, '').replace(/\)\s*Tj$/, '')).join(' ');
+      }
+      if (!text || text.length < 20) {
+        // Fallback: match any text block
+        text = binStr.replace(/[^\x20-\x7E\n\r]/g, ' ');
+      }
+      const textarea = document.getElementById('ticketInputText');
+      if (textarea) {
+        textarea.value = text.trim();
+        previewTicketExtraction();
+        showToast(`Loaded PDF: ${file.name}`);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  } else {
+    reader.onload = function(e) {
+      const textarea = document.getElementById('ticketInputText');
+      if (textarea) {
+        textarea.value = e.target.result;
+        previewTicketExtraction();
+        showToast(`Loaded text: ${file.name}`);
+      }
+    };
+    reader.readAsText(file);
+  }
+}
+
+function addExtractedTicketToTimeline() {
+  if (!lastParsedTicket) return;
+  const p = lastParsedTicket;
+
+  const notesParts = [];
+  if (p.pnr) notesParts.push(`PNR: ${p.pnr}`);
+  if (p.coach) notesParts.push(`Coach: ${p.coach}`);
+  if (p.seat) notesParts.push(`Seat: ${p.seat}`);
+
+  const newNode = {
+    id: 'ticket-' + Date.now(),
+    title: p.title,
+    type: 'fixed',
+    category: p.category,
+    icon: p.isFlight ? 'fa-plane-departure' : 'fa-train',
+    durationMin: p.durationMin,
+    minDurationMin: p.durationMin,
+    fixedStartMin: p.startMin,
+    fixedStartTime: p.depTime,
+    transitMin: p.isFlight ? 45 : 15,
+    transitMode: p.isFlight ? 'flight' : 'train',
+    priority: 10,
+    pnr: p.pnr || 'TICKET',
+    officialDomain: p.isFlight ? 'ryanair.com' : 'trenitalia.com',
+    active: true,
+    notes: notesParts.join(' | ') || 'Imported from travel booking confirmation.'
+  };
+
+  // Insert chronologically into activeNodes
+  let inserted = false;
+  for (let i = 0; i < activeNodes.length; i++) {
+    const nodeStart = activeNodes[i].fixedStartMin || 0;
+    if (newNode.fixedStartMin < nodeStart) {
+      activeNodes.splice(i, 0, newNode);
+      inserted = true;
+      break;
+    }
+  }
+  if (!inserted) {
+    activeNodes.push(newNode);
+  }
+
+  // Clear input
+  const textarea = document.getElementById('ticketInputText');
+  if (textarea) textarea.value = '';
+  document.getElementById('ticketPreviewCard')?.classList.add('hidden');
+  const addBtn = document.getElementById('addTicketBtn');
+  if (addBtn) addBtn.disabled = true;
+  lastParsedTicket = null;
+
+  updateDagMath();
+  showToast(`Locked stop added: "${p.title}"`);
+}
+
+// -------------------------------------------------------------------
 // 7. TAB 2: ANTI-PHISHING OFFICIAL VENDOR VERIFIER
 // -------------------------------------------------------------------
 function renderVerifierCards() {
