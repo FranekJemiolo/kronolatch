@@ -78,7 +78,7 @@ KronoLatch is managed with [`uv`](https://github.com/astral-sh/uv).
 git clone https://github.com/FranekJemiolo/kronolatch.git
 cd kronolatch
 
-# Run automated unit tests (16/16 passing)
+# Run automated unit tests (28/28 passing)
 uv run pytest
 
 # Run on-demand architectural self-test suite (4/4 passing)
@@ -86,6 +86,33 @@ uv run kronolatch self-test
 ```
 
 ### 2. CLI Usage Examples
+
+#### Zero-Cloud Ticket & PDF Ingestion
+```bash
+# Ingest PDF ticket or raw confirmation text directly into a trip DAG
+uv run kronolatch ingest-ticket "./tickets/frecciarossa_9540.pdf" --trip ./my-trip.json
+
+# Parse e-ticket text snippet from clipboard or stdout
+uv run kronolatch ingest-ticket "Treno: Frecciarossa 9540 PNR: TRN991 Da: Roma Termini A: Firenze SMN Partenza: 08:30 Arrivo: 10:05"
+```
+
+#### Real-Time Public Rail Delays (ViaggiaTreno Open Data)
+```bash
+# Query live delay for a specific train
+uv run kronolatch live-delay 9540
+
+# Audit itinerary against real-time train feeds and automatically cut stops to protect reservations
+uv run kronolatch validate --live-delays --auto-cut
+```
+
+#### Peer-to-Peer (P2P) Offline Group Sync
+```bash
+# Generate compact offline sync token for expenses
+uv run kronolatch share --type expenses --sender "Anna"
+
+# Merge companion sync token into local trip without duplicate double-counting
+uv run kronolatch sync "krono1_eNrNk01..." --trip ./my-trip.json
+```
 
 #### Google Spreadsheets & CSV / XLS Import & Export
 ```bash

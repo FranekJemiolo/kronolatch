@@ -4,7 +4,6 @@ Tests for KronoLatch Ticket Ingestion Engine (PDF and Text parsing).
 
 from __future__ import annotations
 
-import io
 from pathlib import Path
 
 import pypdf
@@ -100,12 +99,9 @@ def test_pdf_extraction_roundtrip(tmp_path: Path):
     # Create a simple PDF containing ticket text
     writer = pypdf.PdfWriter()
     # Add a blank page
-    page = writer.add_blank_page(width=612, height=792)
+    writer.add_blank_page(width=612, height=792)
 
-    # In modern pypdf, we can use annotation or standard text writing
-    # Or create a minimal valid PDF with text stream
-    pdf_bytes_stream = io.BytesIO()
-    # Let's create a minimal PDF with PDF stream content
+    # Minimal valid PDF with text stream
     content = b"""%PDF-1.4
 1 0 obj
 << /Type /Catalog /Pages 2 0 R >>
@@ -137,12 +133,12 @@ endobj
 endobj
 xref
 0 6
-0000000000 65535 f 
-0000000009 00000 n 
-0000000058 00000 n 
-0000000115 00000 n 
-0000000244 00000 n 
-0000000506 00000 n 
+0000000000 65535 f
+0000000009 00000 n
+0000000058 00000 n
+0000000115 00000 n
+0000000244 00000 n
+0000000506 00000 n
 trailer
 << /Size 6 /Root 1 0 R >>
 startxref
@@ -186,7 +182,9 @@ def test_ingest_into_trip_dag():
     Coach: 5 Seat: 21B
     """
 
-    updated_trip = TicketIngestor.ingest_into_trip(ticket_text, base_trip, node_id="frecciarossa_leg")
+    updated_trip = TicketIngestor.ingest_into_trip(
+        ticket_text, base_trip, node_id="frecciarossa_leg"
+    )
 
     assert len(updated_trip.nodes) == 2
     # Since train departs at 10:15 and hotel is at 14:00, train node must be first!
