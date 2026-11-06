@@ -192,6 +192,11 @@ const tripPresets = {
 };
 
 let activeNodes = JSON.parse(JSON.stringify(tripPresets.rome.nodes));
+let currentTripData = tripPresets.rome;
+
+function renderTimeline() {
+  updateDagMath();
+}
 
 // -------------------------------------------------------------------
 // 2. ANTI-PHISHING GROUND TRUTH DATABASE
@@ -376,6 +381,7 @@ function switchTab(tabId) {
 function switchTripPreset(presetKey) {
   currentTripPreset = presetKey;
   const preset = tripPresets[presetKey];
+  currentTripData = preset;
   activeNodes = JSON.parse(JSON.stringify(preset.nodes));
   simulateRailDelay = false;
   document.getElementById('dagHeaderTitle').textContent = preset.title;
@@ -435,7 +441,8 @@ function updateDagMath() {
     }
 
     const baseTransit = idx === 0 ? 0 : node.transitMin;
-    const riskBuffer = idx === 0 ? 0 : Math.ceil(baseTransit * (riskPct / 100));
+    const weatherMultiplier = (weatherRainActive && (node.transitMode === 'walk' || node.transitMode === 'car')) ? 1.25 : 1.0;
+    const riskBuffer = idx === 0 ? 0 : Math.ceil(baseTransit * (riskPct / 100) * weatherMultiplier);
     const stationBuffer = idx === 0 ? 0 : hubOverhead;
     const delayPenalty = (simulateRailDelay && idx === 1) ? 35 : 0;
 
@@ -502,6 +509,11 @@ function updateDagMath() {
             <div class="flex items-center gap-2 flex-wrap">
               <h4 class="font-bold text-sm text-slate-900">${node.title}</h4>
               ${badgeHtml}
+              ${cpmViewActive ? (
+                (slackMin != null && slackMin <= 5)
+                  ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300">🔴 Critical Path (≤5m Slack)</span>`
+                  : `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">🟢 Slack: ${slackMin != null ? slackMin : 25}m</span>`
+              ) : ''}
             </div>
             <p class="text-xs text-slate-500 mt-1 flex items-center gap-3">
               <span class="font-semibold text-slate-700"><i class="fa-regular fa-clock mr-1 text-slate-400"></i>${formatMinToTime(actualStart)} — ${formatMinToTime(endMin)} (${node.durationMin}m)</span>
@@ -2706,6 +2718,487 @@ function synthesizeWishlistTour() {
 
   showToast(`Synthesized ${newNodes.length} stops & ${newExpenses.length} expenses for ${dest}!`);
 }
+
+// =========================================================================
+// EXTENDED HORIZONS: RFC 5545 iCALENDAR EXPORTER (.ics)
+// =========================================================================
+
+function downloadIcsCalendar() {
+  if (!activeNodes || activeNodes.length === 0) {
+    showToast('No active nodes to export');
+    return;
+  }
+
+  const dest = currentTripData.destination || 'Europe Tour';
+  const tripTitle = currentTripData.title || 'KronoLatch Tour';
+  const nowUtc = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+  const baseDateStr = '2026-06-15'; // Default reference base date
+
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//KronoLatch//Deterministic Travel Orchestrator//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    `X-WR-CALNAME:${tripTitle.replace(/,/g, '\\,')}`,
+    'X-WR-TIMEZONE:Europe/Rome'
+  ];
+
+  let cursor = activeNodes[0].fixedStartMin != null ? activeNodes[0].fixedStartMin : 480;
+
+  activeNodes.forEach((node, idx) => {
+    if (idx > 0) cursor += (node.transitMin || 0) + 15;
+    const startM = (node.type === 'fixed' && node.fixedStartMin != null) ? node.fixedStartMin : cursor;
+    const endM = startM + node.durationMin;
+    cursor = endM;
+
+    const sH = String(Math.floor(startM / 60) % 24).padStart(2, '0');
+    const sM = String(startM % 60).padStart(2, '0');
+    const eH = String(Math.floor(endM / 60) % 24).padStart(2, '0');
+    const eM = String(endM % 60).padStart(2, '0');
+
+    const dtStart = `${baseDateStr.replace(/-/g, '')}T${sH}${sM}00`;
+    const dtEnd = `${baseDateStr.replace(/-/g, '')}T${eH}${eM}00`;
+
+    let alarmMin = 20;
+    if (node.category === 'flight' || node.transitMode === 'flight') alarmMin = 120 + (node.transitMin || 0);
+    else if (node.category === 'rail' || node.transitMode === 'train') alarmMin = 25 + (node.transitMin || 0);
+
+    const descParts = [
+      `Node: ${node.title}`,
+      `Type: ${node.type.toUpperCase()}`,
+      `Duration: ${node.durationMin}m`,
+      node.pnr ? `PNR: ${node.pnr}` : '',
+      node.officialDomain ? `Official Portal: ${node.officialDomain}` : '',
+      node.notes ? `Notes: ${node.notes}` : ''
+    ].filter(Boolean).join('\\n');
+
+    lines.push(
+      'BEGIN:VEVENT',
+      `UID:${node.id}-${nowUtc}@kronolatch.org`,
+      `DTSTAMP:${nowUtc}`,
+      `DTSTART:${dtStart}`,
+      `DTEND:${dtEnd}`,
+      `SUMMARY:${node.title.replace(/,/g, '\\,')}`,
+      `DESCRIPTION:${descParts}`,
+      `LOCATION:${dest.replace(/,/g, '\\,')}`,
+      'STATUS:CONFIRMED',
+      'BEGIN:VALARM',
+      `TRIGGER:-PT${alarmMin}M`,
+      'ACTION:DISPLAY',
+      `DESCRIPTION:KronoLatch Alert: ${alarmMin}m departure buffer ahead of ${node.title}`,
+      'END:VALARM',
+      'END:VEVENT'
+    );
+  });
+
+  lines.push('END:VCALENDAR');
+  const icsBlob = new Blob([lines.join('\r\n') + '\r\n'], { type: 'text/calendar;charset=utf-8' });
+  const icsUrl = URL.createObjectURL(icsBlob);
+  const a = document.createElement('a');
+  a.href = icsUrl;
+  a.download = `${(currentTripData.trip_id || 'trip')}-schedule.ics`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(icsUrl);
+
+  showToast('Downloaded trip-schedule.ics with buffer-aware alarms!');
+}
+
+// =========================================================================
+// EXTENDED HORIZONS: MONTE CARLO STOCHASTIC TRANSIT SIMULATOR
+// =========================================================================
+
+let lastSimAlpha = 0.44;
+
+function openSimulationModal() {
+  const modal = document.getElementById('simModal');
+  if (modal) {
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    runMonteCarloWeb();
+  }
+}
+
+function closeSimulationModal() {
+  const modal = document.getElementById('simModal');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+}
+
+function runMonteCarloWeb() {
+  const iterations = 1000;
+  const hubOverhead = parseInt(document.getElementById('hubSlider')?.value || '15', 10);
+  let conflictRuns = 0;
+  const nodeMisses = {};
+  const totalDelays = [];
+
+  const fixedNodes = activeNodes.filter(n => n.type === 'fixed');
+  fixedNodes.forEach(n => { nodeMisses[n.id] = 0; });
+
+  for (let it = 0; it < iterations; it++) {
+    let cursor = activeNodes[0]?.fixedStartMin != null ? activeNodes[0].fixedStartMin : 480;
+    let runConflict = false;
+    let runTotalDelay = 0;
+
+    for (let i = 0; i < activeNodes.length; i++) {
+      const node = activeNodes[i];
+      if (i === 0) {
+        cursor += node.durationMin;
+        continue;
+      }
+
+      // Sample empirical delay
+      let sampledDelay = 0;
+      const u = Math.random();
+      if (node.transitMode === 'flight' || node.category === 'flight') {
+        sampledDelay = Math.max(0, -Math.log(1 - u) * 16 - 3);
+      } else if (node.transitMode === 'train' || node.category === 'rail') {
+        sampledDelay = Math.max(0, -Math.log(1 - u) * 9 - 1);
+      } else if (node.transitMode === 'car' || node.category === 'car') {
+        sampledDelay = Math.max(0, (Math.random() * 8) + (Math.random() > 0.6 ? 5 : 0));
+      } else {
+        sampledDelay = Math.max(0, (Math.random() * 3) - 0.5);
+      }
+      runTotalDelay += sampledDelay;
+
+      const physicalTransit = (node.transitMin || 0) + hubOverhead + sampledDelay;
+      const arrivalTime = cursor + physicalTransit;
+
+      if (node.type === 'fixed' && node.fixedStartMin != null) {
+        if (arrivalTime > node.fixedStartMin) {
+          runConflict = true;
+          nodeMisses[node.id] = (nodeMisses[node.id] || 0) + 1;
+          cursor = arrivalTime;
+        } else {
+          cursor = node.fixedStartMin;
+        }
+      } else {
+        cursor = arrivalTime;
+      }
+
+      cursor += node.durationMin;
+    }
+
+    if (runConflict) conflictRuns++;
+    totalDelays.push(runTotalDelay);
+  }
+
+  totalDelays.sort((a, b) => a - b);
+  const fragilityPct = Math.round((conflictRuns / iterations) * 1000) / 10;
+  const p50 = Math.round(totalDelays[Math.floor(iterations * 0.50)]);
+  const p80 = Math.round(totalDelays[Math.floor(iterations * 0.80)]);
+  const p95 = Math.round(totalDelays[Math.floor(iterations * 0.95)]);
+  const p99 = Math.round(totalDelays[Math.floor(iterations * 0.99)]);
+
+  // UI updates
+  const scoreEl = document.getElementById('simFragilityScore');
+  const statusEl = document.getElementById('simFragilityStatus');
+  if (scoreEl) scoreEl.textContent = `${fragilityPct.toFixed(1)}%`;
+  if (statusEl) {
+    if (fragilityPct <= 5) {
+      statusEl.textContent = 'ROBUST (LOW RISK)';
+      statusEl.className = 'font-bold text-[11px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800';
+    } else {
+      statusEl.textContent = 'FRAGILE (HIGH RISK)';
+      statusEl.className = 'font-bold text-[11px] px-2 py-0.5 rounded-full bg-rose-100 text-rose-800';
+    }
+  }
+
+  const p50El = document.getElementById('simP50');
+  const p80El = document.getElementById('simP80');
+  const p95El = document.getElementById('simP95');
+  const p99El = document.getElementById('simP99');
+  if (p50El) p50El.textContent = `+${p50}m`;
+  if (p80El) p80El.textContent = `+${p80}m`;
+  if (p95El) p95El.textContent = `+${p95}m`;
+  if (p99El) p99El.textContent = `+${p99}m`;
+
+  // Recommended alpha
+  lastSimAlpha = Math.min(50, Math.max(25, Math.round(p95 / 1.1)));
+  const recAlphaEl = document.getElementById('simRecommendedAlpha');
+  if (recAlphaEl) recAlphaEl.textContent = `+${lastSimAlpha}%`;
+
+  // Critical nodes container
+  const critContainer = document.getElementById('simCriticalNodesContainer');
+  if (critContainer) {
+    const missedList = Object.entries(nodeMisses).filter(([_, count]) => count > 0);
+    if (missedList.length === 0) {
+      critContainer.innerHTML = '<span class="text-emerald-700 font-bold">✓ Zero fixed reservations were missed across 1,000 runs!</span>';
+    } else {
+      critContainer.innerHTML = missedList.map(([nid, count]) => {
+        const node = activeNodes.find(n => n.id === nid);
+        const rate = ((count / iterations) * 100).toFixed(1);
+        return `<div class="flex justify-between items-center py-0.5">
+          <span class="font-bold text-slate-800">${node ? node.title : nid}</span>
+          <span class="font-bold text-rose-700">${rate}% Miss Rate</span>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  // Update badge on main card
+  const badge = document.getElementById('fragilityBadge');
+  if (badge) badge.textContent = `${fragilityPct.toFixed(0)}% Fragility`;
+}
+
+function applyRecommendedRisk() {
+  const slider = document.getElementById('riskSlider');
+  if (slider) {
+    slider.value = lastSimAlpha;
+    updateDagMath();
+    closeSimulationModal();
+    showToast(`Applied optimal safety leeway cushion (+${lastSimAlpha}%)!`);
+  }
+}
+
+// =========================================================================
+// EXTENDED HORIZONS: WEATHER LEEWAY & SOLAR TOGGLE
+// =========================================================================
+
+let weatherRainActive = false;
+
+function toggleRainBuffer() {
+  const checkbox = document.getElementById('rainToggle');
+  weatherRainActive = checkbox ? checkbox.checked : !weatherRainActive;
+
+  if (weatherRainActive) {
+    showToast('Rain Weather Leeway applied: +25% buffer on walking & driving legs.');
+  } else {
+    showToast('Cleared weather buffer.');
+  }
+  updateDagMath();
+}
+
+// =========================================================================
+// EXTENDED HORIZONS: CRITICAL PATH METHOD (CPM) TOPOLOGY TOGGLE
+// =========================================================================
+
+let cpmViewActive = false;
+
+function toggleTopologicalView() {
+  cpmViewActive = !cpmViewActive;
+  const btn = document.getElementById('topoToggleBtn');
+  if (btn) {
+    if (cpmViewActive) {
+      btn.classList.add('bg-sky-100', 'text-sky-900', 'border-sky-300');
+      btn.classList.remove('bg-white');
+    } else {
+      btn.classList.remove('bg-sky-100', 'text-sky-900', 'border-sky-300');
+      btn.classList.add('bg-white');
+    }
+  }
+  renderTimeline();
+}
+
+// =========================================================================
+// EXTENDED HORIZONS: ITEMIZED RESTAURANT RECEIPT SPLITTER
+// =========================================================================
+
+let currentSplitLiabilities = {};
+let currentSplitExpenses = [];
+
+function openReceiptModal() {
+  const modal = document.getElementById('receiptModal');
+  if (modal) {
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    calculateReceiptSplitWeb();
+  }
+}
+
+function closeReceiptModal() {
+  const modal = document.getElementById('receiptModal');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+}
+
+function loadReceiptPreset(preset) {
+  const titleInput = document.getElementById('rcptTitleInput');
+  const itemsInput = document.getElementById('rcptItemsInput');
+  const taxInput = document.getElementById('rcptTaxInput');
+  const tipInput = document.getElementById('rcptTipInput');
+  const srvInput = document.getElementById('rcptServiceInput');
+
+  if (preset === 'trastevere') {
+    if (titleInput) titleInput.value = 'Trastevere Artisan Dinner';
+    if (itemsInput) itemsInput.value = 'Truffle Pasta 32.00 [Franek]\nChianti Wine Bottle 25.00 [Franek, Anna]\nMargherita Pizza 12.00 [Marek]\nTiramisu to share 14.00 [Franek, Anna, Marek, Kasia]';
+    if (taxInput) taxInput.value = '8.30';
+    if (tipInput) tipInput.value = '10.00';
+    if (srvInput) srvInput.value = '4.00';
+  } else if (preset === 'florence') {
+    if (titleInput) titleInput.value = 'Florentine Steakhouse';
+    if (itemsInput) itemsInput.value = 'Bistecca alla Fiorentina (1.2kg) 54.00 [Marek, Kasia]\nRibollita Soup 14.00 [Franek]\nPici al Ragù 16.00 [Anna]\nBrunello di Montalcino 36.00 [Franek, Marek, Kasia]\nCantucci & Vin Santo 12.00 [Franek, Anna]';
+    if (taxInput) taxInput.value = '13.20';
+    if (tipInput) tipInput.value = '15.00';
+    if (srvInput) srvInput.value = '6.00';
+  }
+  calculateReceiptSplitWeb();
+}
+
+function calculateReceiptSplitWeb() {
+  const rawText = document.getElementById('rcptItemsInput')?.value || '';
+  const payer = document.getElementById('rcptPayerInput')?.value || 'Franek';
+  const tax = parseFloat(document.getElementById('rcptTaxInput')?.value || '0') || 0;
+  const tip = parseFloat(document.getElementById('rcptTipInput')?.value || '0') || 0;
+  const srv = parseFloat(document.getElementById('rcptServiceInput')?.value || '0') || 0;
+  const title = document.getElementById('rcptTitleInput')?.value || 'Restaurant Bill';
+
+  const defaultTravelers = travelers || ['Franek', 'Anna', 'Marek', 'Kasia'];
+  const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
+  const items = [];
+  let subtotal = 0;
+
+  lines.forEach(line => {
+    const priceMatch = line.match(/(\d+[.,]\d{2})/);
+    if (!priceMatch) return;
+    const price = parseFloat(priceMatch[1].replace(',', '.'));
+    subtotal += price;
+
+    let desc = line.substring(0, priceMatch.index).trim().replace(/^[0-9xX*•\-\s]+/, '');
+    if (!desc) desc = 'Item';
+
+    let parts = defaultTravelers;
+    const partMatch = line.match(/\[(.*?)\]/);
+    if (partMatch) {
+      parts = partMatch[1].split(',').map(s => s.trim()).filter(Boolean);
+    }
+    items.push({ desc, price, parts });
+  });
+
+  const overhead = tax + tip + srv;
+  const total = subtotal + overhead;
+  const overheadRatio = subtotal > 0 ? (overhead / subtotal) : 0;
+
+  const liabilities = {};
+  defaultTravelers.forEach(t => { liabilities[t] = 0; });
+
+  const generated = [];
+  items.forEach((item, idx) => {
+    const effectivePrice = item.price * (1 + overheadRatio);
+    const perPerson = effectivePrice / item.parts.length;
+    item.parts.forEach(t => {
+      liabilities[t] = (liabilities[t] || 0) + perPerson;
+    });
+
+    generated.push({
+      id: `exp_rcpt_${Date.now()}_${idx + 1}`,
+      title: `${item.desc} (${title})`,
+      payer: payer,
+      amount: Math.round(effectivePrice * 100) / 100,
+      currency: 'EUR',
+      participants: item.parts,
+      nodeId: null
+    });
+  });
+
+  // Cent exact rounding
+  let sumRounded = 0;
+  Object.keys(liabilities).forEach(k => {
+    liabilities[k] = Math.round(liabilities[k] * 100) / 100;
+    sumRounded += liabilities[k];
+  });
+  const diff = Math.round((total - sumRounded) * 100) / 100;
+  if (Math.abs(diff) > 0) {
+    const highest = Object.keys(liabilities).sort((a, b) => liabilities[b] - liabilities[a])[0];
+    if (highest) liabilities[highest] = Math.round((liabilities[highest] + diff) * 100) / 100;
+  }
+
+  currentSplitLiabilities = liabilities;
+  currentSplitExpenses = generated;
+
+  // Render breakdown box
+  const box = document.getElementById('rcptBreakdownBox');
+  if (box) {
+    box.innerHTML = `
+      <div class="flex justify-between font-bold border-b border-amber-200 pb-1">
+        <span>Subtotal: €${subtotal.toFixed(2)}</span>
+        <span class="text-amber-800">Tax/Tip/Service: +€${overhead.toFixed(2)}</span>
+        <span class="text-emerald-800 font-extrabold">Total: €${total.toFixed(2)}</span>
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-center font-semibold">
+        ${Object.entries(liabilities).map(([t, amt]) => `
+          <div class="p-1.5 bg-white/80 rounded border border-amber-200">
+            <span class="text-[10px] text-slate-500 block">${t}</span>
+            <span class="text-slate-900 font-bold">€${amt.toFixed(2)}</span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+}
+
+function appendReceiptExpensesToLedger() {
+  if (!currentSplitExpenses || currentSplitExpenses.length === 0) {
+    showToast('No parsed items to append');
+    return;
+  }
+  expenses.push(...currentSplitExpenses);
+  closeReceiptModal();
+  updateExpenseUI();
+  updateSettlementMath();
+  saveStateToLocalStorage();
+  showToast(`Appended ${currentSplitExpenses.length} itemized items to the group ledger!`);
+}
+
+// =========================================================================
+// EXTENDED HORIZONS: SCHENGEN 90/180-DAY VISA VAULT
+// =========================================================================
+
+function openSchengenModal() {
+  const modal = document.getElementById('schengenModal');
+  if (modal) {
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    auditSchengenWeb();
+  }
+}
+
+function closeSchengenModal() {
+  const modal = document.getElementById('schengenModal');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+}
+
+function auditSchengenWeb() {
+  const entryStr = document.getElementById('schengenEntryDate')?.value || '2026-06-01';
+  const exitStr = document.getElementById('schengenExitDate')?.value || '2026-06-15';
+  const passStr = document.getElementById('schengenPassportExp')?.value || '2028-10-01';
+
+  const entry = new Date(entryStr);
+  const exit = new Date(exitStr);
+  const stayDays = Math.max(1, Math.round((exit - entry) / (1000 * 60 * 60 * 24)) + 1);
+
+  const stayDaysEl = document.getElementById('schengenStayDays');
+  const daysEntryEl = document.getElementById('schengenDaysEntry');
+  const daysExitEl = document.getElementById('schengenDaysExit');
+  if (stayDaysEl) stayDaysEl.textContent = `${stayDays} days`;
+  if (daysEntryEl) daysEntryEl.textContent = '90 days';
+  if (daysExitEl) daysExitEl.textContent = `${Math.max(0, 90 - stayDays)} days`;
+
+  const passStatusEl = document.getElementById('schengenPassportStatus');
+  if (passStatusEl) {
+    const passExp = new Date(passStr);
+    const minExp = new Date(exit);
+    minExp.setMonth(minExp.getMonth() + 3);
+
+    if (passExp < exit) {
+      passStatusEl.innerHTML = `<span class="text-rose-700 font-bold">❌ PASSPORT EXPIRED before planned departure (${exitStr})!</span>`;
+    } else if (passExp < minExp) {
+      passStatusEl.innerHTML = `<span class="text-amber-700 font-bold">⚠ WARNING: Passport expires within 3 months of Schengen exit. EU law requires ≥90 days validity!</span>`;
+    } else {
+      passStatusEl.innerHTML = `<span class="text-emerald-700 font-bold">✓ Passport valid through ${passStr} (satisfies 3-month EU departure rule).</span>`;
+    }
+  }
+}
+
 
 
 

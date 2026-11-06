@@ -79,7 +79,7 @@ KronoLatch is managed with [`uv`](https://github.com/astral-sh/uv).
 git clone https://github.com/FranekJemiolo/kronolatch.git
 cd kronolatch
 
-# Run automated unit tests (31/31 passing)
+# Run automated unit tests (45/45 passing across 14 test suites)
 uv run pytest
 
 # Run on-demand architectural self-test suite (4/4 passing)
@@ -87,6 +87,54 @@ uv run kronolatch self-test
 ```
 
 ### 2. CLI Usage Examples
+
+#### Stochastic Itinerary Simulation & Monte Carlo Delay Stress-Testing
+```bash
+# Run 2,500 Monte Carlo journeys with heavy-tailed transit variance to compute Trip Fragility Score
+uv run kronolatch simulate --iterations 2500 --confidence 0.95
+
+# Test a custom trip file and output recommended risk cushion (alpha*)
+uv run kronolatch simulate --trip ./my-trip.json --iterations 1000
+```
+
+#### Astronomical Solar Position & Daylight Audit (NOAA)
+```bash
+# Audit outdoor monuments against sunset, golden hour, and twilight without internet
+uv run kronolatch solar-audit --date 2026-06-21
+
+# Apply rain weather leeway (+25% buffer on walking & driving legs)
+uv run kronolatch solar-audit --rain-prob 0.60
+```
+
+#### Topological Critical Path Method (CPM) Analyzer
+```bash
+# Calculate Earliest/Latest Start/Finish times and isolate zero-slack bottleneck edges
+uv run kronolatch graph
+
+# Highlight only nodes sitting on the critical path
+uv run kronolatch graph --critical-only --threshold 5
+```
+
+#### Itemized Receipt Splitting with Proportional Tax & Tip
+```bash
+# Parse line items and allocate tax/tip/coperto with cent-exact precision
+uv run kronolatch split-receipt "Truffle Pasta 32.00 [Franek]
+Chianti Wine 25.00 [Franek, Anna]
+Pizza Margherita 12.00 [Marek]
+Coperto 4.00" --payer Franek --tip 5.00
+```
+
+#### Schengen 90/180-Day Rule & Visa Compliance Vault
+```bash
+# Audit planned trip against EU Regulation 2016/399 rolling 180-day stay limits and passport 3-month rule
+uv run kronolatch schengen-audit --entry 2026-06-01 --exit 2026-06-15 --passport-expiry 2028-10-01
+```
+
+#### RFC 5545 iCalendar Export with Buffer-Aware Reminder Alarms
+```bash
+# Export trip DAG to standard .ics with dynamic transition alarms (-120m flights, -25m trains)
+uv run kronolatch export-ics --out ./rome-trip.ics
+```
 
 #### AI Wishlist Tour Planner & Research Engine
 ```bash

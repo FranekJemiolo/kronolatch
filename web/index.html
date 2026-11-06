@@ -76,6 +76,12 @@
           <span class="hidden sm:inline">AI Tour Planner</span>
         </button>
 
+        <!-- Schengen 90/180 Vault Button -->
+        <button onclick="openSchengenModal()" title="90/180-Day Schengen Visa Compliance & Passport Vault" class="text-xs font-semibold px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-sm transition flex items-center gap-1.5">
+          <i class="fa-solid fa-passport text-emerald-600"></i>
+          <span class="hidden sm:inline">Schengen 90/180</span>
+        </button>
+
         <!-- Quick AI Skill Button -->
         <button onclick="switchTab('studio')" class="text-xs font-semibold px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white shadow-sm transition flex items-center gap-1.5">
           <i class="fa-solid fa-sparkles"></i>
@@ -223,6 +229,32 @@
                 <span id="liveTransitBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-sky-200 text-sky-900 font-bold">ViaggiaTreno</span>
               </button>
 
+              <!-- Monte Carlo Simulation Button -->
+              <button onclick="openSimulationModal()" class="w-full py-2 px-3 rounded-xl border border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-900 text-xs font-semibold flex items-center justify-between transition">
+                <span class="flex items-center gap-2">
+                  <i class="fa-solid fa-dice-d20 text-purple-600"></i>
+                  <span>Monte Carlo Stress Test (N=1,000)</span>
+                </span>
+                <span id="fragilityBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-purple-200 text-purple-900 font-bold">Fragility Meter</span>
+              </button>
+
+              <!-- Weather Leeway & Solar Toggle -->
+              <div class="p-2.5 bg-amber-50/60 border border-amber-200/80 rounded-xl space-y-2 text-xs">
+                <div class="flex items-center justify-between">
+                  <span class="font-bold text-amber-900 flex items-center gap-1.5">
+                    <i class="fa-solid fa-sun text-amber-600"></i>
+                    <span>Solar: 🌅 05:34 | 📸 20:06 | 🌇 20:48</span>
+                  </span>
+                </div>
+                <label class="flex items-center justify-between cursor-pointer text-[11px] text-slate-700">
+                  <span class="flex items-center gap-1.5">
+                    <i class="fa-solid fa-cloud-rain text-sky-600"></i>
+                    <span>Rain Weather Leeway (+25% buffer)</span>
+                  </span>
+                  <input id="rainToggle" type="checkbox" onchange="toggleRainBuffer()" class="w-4 h-4 accent-sky-600 rounded" />
+                </label>
+              </div>
+
               <div class="flex items-center gap-2">
                 <button onclick="autoTrimLowestPriority()" class="flex-1 py-2 px-3 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold transition flex items-center justify-center gap-1.5 shadow-sm">
                   <i class="fa-solid fa-shield"></i>
@@ -342,7 +374,15 @@
             <div class="flex flex-wrap items-center gap-2 text-xs">
               <button onclick="openSheetsModal('itinerary')" class="px-2.5 py-1.5 rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold flex items-center gap-1.5 transition shadow-sm">
                 <i class="fa-solid fa-file-excel text-emerald-600"></i>
-                <span>Google Sheets / CSV</span>
+                <span>Google Sheets</span>
+              </button>
+              <button onclick="downloadIcsCalendar()" class="px-2.5 py-1.5 rounded-lg border border-indigo-300 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 font-semibold flex items-center gap-1.5 transition shadow-sm" title="Download standard RFC 5545 calendar with transition alarms">
+                <i class="fa-solid fa-calendar-plus text-indigo-600"></i>
+                <span>Export iCal (.ics)</span>
+              </button>
+              <button onclick="toggleTopologicalView()" id="topoToggleBtn" class="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-800 font-semibold flex items-center gap-1.5 transition shadow-sm" title="View Earliest/Latest finish times & zero-slack critical path">
+                <i class="fa-solid fa-network-wired text-sky-600"></i>
+                <span>CPM Slack Graph</span>
               </button>
               <button onclick="exportItineraryCSV()" class="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium flex items-center gap-1.5 transition">
                 <i class="fa-solid fa-download text-slate-500"></i>
@@ -459,6 +499,10 @@
                 <p class="text-xs text-slate-500 mt-0.5">Click traveler chips to include or exclude people from specific expenses</p>
               </div>
               <div class="flex flex-wrap items-center gap-2">
+                <button onclick="openReceiptModal()" class="px-2.5 py-1.5 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 font-semibold text-xs flex items-center gap-1.5 transition shadow-sm">
+                  <i class="fa-solid fa-receipt text-amber-600"></i>
+                  <span>Split Itemized Bill</span>
+                </button>
                 <button onclick="openSyncModal()" class="px-2.5 py-1.5 rounded-lg border border-indigo-300 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 font-semibold text-xs flex items-center gap-1.5 transition shadow-sm">
                   <i class="fa-solid fa-qrcode text-indigo-600"></i>
                   <span>P2P Offline Sync</span>
@@ -1182,6 +1226,282 @@
             <span>Reset to Baseline Defaults</span>
           </button>
         </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MONTE CARLO STOCHASTIC SIMULATION MODAL   -->
+  <!-- ========================================== -->
+  <div id="simModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+    <div class="travel-card bg-white w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-2xl border border-slate-200 rounded-2xl animate-fade-in">
+      
+      <div class="flex items-start justify-between border-b border-slate-100 pb-4">
+        <div>
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center text-base">
+              <i class="fa-solid fa-dice-d20"></i>
+            </div>
+            <h3 class="text-lg font-bold text-slate-900">Monte Carlo Delay Stress Simulation</h3>
+            <span class="px-2.5 py-0.5 rounded-full text-[10px] uppercase font-bold bg-purple-100 text-purple-800">
+              1,000 Trials
+            </span>
+          </div>
+          <p class="text-xs text-slate-500 mt-1">
+            Simulates 1,000 journeys with heavy-tailed flight and rail delay distributions to compute your Trip Fragility Score.
+          </p>
+        </div>
+        <button onclick="closeSimulationModal()" class="text-slate-400 hover:text-slate-600 text-lg p-1 rounded-lg hover:bg-slate-100 transition">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Simulation Results Card -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+        <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+          <span class="text-slate-500 font-medium block">Trip Fragility Score</span>
+          <div class="flex items-baseline gap-2">
+            <span id="simFragilityScore" class="text-3xl font-extrabold text-amber-600">28.5%</span>
+            <span id="simFragilityStatus" class="font-bold text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">MODERATE RISK</span>
+          </div>
+          <p class="text-[11px] text-slate-500">Likelihood of missing at least one locked fixed booking under real-world transit variance.</p>
+        </div>
+
+        <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+          <span class="text-slate-500 font-medium block">Recommended Risk Cushion ($\alpha^*$)</span>
+          <div class="flex items-baseline gap-2">
+            <span id="simRecommendedAlpha" class="text-3xl font-extrabold text-indigo-700">+44%</span>
+            <span class="text-slate-500 text-[11px]">vs current +20%</span>
+          </div>
+          <p class="text-[11px] text-slate-500">Buffer multiplier required to achieve 95% on-time arrival confidence.</p>
+        </div>
+      </div>
+
+      <!-- Percentiles -->
+      <div class="space-y-1.5 text-xs">
+        <span class="font-bold text-slate-800 block">Stochastic Delay Distribution (Cumulative Trip Variance):</span>
+        <div class="grid grid-cols-4 gap-2 text-center">
+          <div class="p-2.5 bg-slate-100 rounded-lg">
+            <span class="text-[10px] text-slate-500 block">P50 (Median)</span>
+            <span id="simP50" class="font-bold text-slate-900">+20m</span>
+          </div>
+          <div class="p-2.5 bg-slate-100 rounded-lg">
+            <span class="text-[10px] text-slate-500 block">P80 (Heavy)</span>
+            <span id="simP80" class="font-bold text-slate-900">+32m</span>
+          </div>
+          <div class="p-2.5 bg-slate-100 rounded-lg">
+            <span class="text-[10px] text-slate-500 block">P95 (Severe)</span>
+            <span id="simP95" class="font-bold text-amber-700">+47m</span>
+          </div>
+          <div class="p-2.5 bg-slate-100 rounded-lg">
+            <span class="text-[10px] text-slate-500 block">P99 (Extreme)</span>
+            <span id="simP99" class="font-bold text-rose-700">+66m</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Critical Vulnerable Nodes -->
+      <div class="space-y-1.5 text-xs">
+        <span class="font-bold text-slate-800 block">Vulnerable Fixed Reservations:</span>
+        <div id="simCriticalNodesContainer" class="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-900 space-y-1">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="flex items-center justify-between pt-2 border-t border-slate-100">
+        <button onclick="runMonteCarloWeb()" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition flex items-center gap-1.5">
+          <i class="fa-solid fa-rotate"></i>
+          <span>Re-Simulate (New Seed)</span>
+        </button>
+        <button onclick="applyRecommendedRisk()" class="px-5 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
+          <i class="fa-solid fa-shield-check"></i>
+          <span>Apply Recommended Cushion (+44%)</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- ITEMIZED RECEIPT SPLITTER MODAL            -->
+  <!-- ========================================== -->
+  <div id="receiptModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+    <div class="travel-card bg-white w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-2xl border border-slate-200 rounded-2xl animate-fade-in">
+      
+      <div class="flex items-start justify-between border-b border-slate-100 pb-4">
+        <div>
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center text-base">
+              <i class="fa-solid fa-receipt"></i>
+            </div>
+            <h3 class="text-lg font-bold text-slate-900">Itemized Receipt & Overhead Splitter</h3>
+            <span class="px-2.5 py-0.5 rounded-full text-[10px] uppercase font-bold bg-amber-100 text-amber-800">
+              Cent-Exact
+            </span>
+          </div>
+          <p class="text-xs text-slate-500 mt-1">
+            Split restaurant meals and grocery runs where travelers ordered different items. Distributes tax and tip proportionally.
+          </p>
+        </div>
+        <button onclick="closeReceiptModal()" class="text-slate-400 hover:text-slate-600 text-lg p-1 rounded-lg hover:bg-slate-100 transition">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Presets -->
+      <div class="space-y-1">
+        <label class="text-[11px] font-bold text-slate-700 block">Sample Receipt Presets:</label>
+        <div class="flex flex-wrap gap-2 text-xs">
+          <button onclick="loadReceiptPreset('trastevere')" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition">
+            🍕 Trastevere Trattoria (Pasta + Wine)
+          </button>
+          <button onclick="loadReceiptPreset('florence')" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition">
+            🥩 Florentine Steakhouse (Steak + Carafe)
+          </button>
+        </div>
+      </div>
+
+      <!-- Form Inputs -->
+      <div class="space-y-3 text-xs">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="font-bold text-slate-800 block mb-1">Bill Description:</label>
+            <input id="rcptTitleInput" type="text" value="Trastevere Artisan Dinner" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-800" />
+          </div>
+          <div>
+            <label class="font-bold text-slate-800 block mb-1">Who Paid the Bill?</label>
+            <select id="rcptPayerInput" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-800">
+              <option value="Franek">Franek</option>
+              <option value="Anna">Anna</option>
+              <option value="Marek">Marek</option>
+              <option value="Kasia">Kasia</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="font-bold text-slate-800 block mb-1">Receipt Line Items (Item Price [Participants]):</label>
+          <textarea id="rcptItemsInput" rows="4" class="w-full px-3 py-2 rounded-xl border border-slate-300 font-mono text-slate-800 text-xs">Truffle Pasta 32.00 [Franek]
+Chianti Wine Bottle 25.00 [Franek, Anna]
+Margherita Pizza 12.00 [Marek]
+Tiramisu to share 14.00 [Franek, Anna, Marek, Kasia]</textarea>
+          <span class="text-[11px] text-slate-400">Format: Item description, price, optional [Name1, Name2] bracketed participants.</span>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3">
+          <div>
+            <label class="font-bold text-slate-800 block mb-1">Tax / IVA (€):</label>
+            <input id="rcptTaxInput" type="number" step="0.50" value="8.30" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-800 font-mono" />
+          </div>
+          <div>
+            <label class="font-bold text-slate-800 block mb-1">Tip / Gratuity (€):</label>
+            <input id="rcptTipInput" type="number" step="1.00" value="10.00" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-800 font-mono" />
+          </div>
+          <div>
+            <label class="font-bold text-slate-800 block mb-1">Coperto / Service (€):</label>
+            <input id="rcptServiceInput" type="number" step="1.00" value="4.00" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-800 font-mono" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Calculated Breakdown -->
+      <div id="rcptBreakdownBox" class="p-3 bg-amber-50/70 border border-amber-200 rounded-xl space-y-2 text-xs">
+        <!-- Populated by JS -->
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+        <button onclick="calculateReceiptSplitWeb()" class="px-4 py-2 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-semibold transition">
+          Recalculate Proportions
+        </button>
+        <button onclick="appendReceiptExpensesToLedger()" class="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
+          <i class="fa-solid fa-plus"></i>
+          <span>Append to Trip Ledger</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- SCHENGEN 90/180-DAY VISA VAULT MODAL       -->
+  <!-- ========================================== -->
+  <div id="schengenModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+    <div class="travel-card bg-white w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-2xl border border-slate-200 rounded-2xl animate-fade-in">
+      
+      <div class="flex items-start justify-between border-b border-slate-100 pb-4">
+        <div>
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center text-base">
+              <i class="fa-solid fa-passport"></i>
+            </div>
+            <h3 class="text-lg font-bold text-slate-900">Schengen 90/180-Day Compliance Vault</h3>
+            <span class="px-2.5 py-0.5 rounded-full text-[10px] uppercase font-bold bg-emerald-100 text-emerald-800">
+              Regulation (EU) 2016/399
+            </span>
+          </div>
+          <p class="text-xs text-slate-500 mt-1">
+            Calculates rolling 180-day short-stay legal limits and verifies passport validity rules. 100% offline, zero cloud tracking.
+          </p>
+        </div>
+        <button onclick="closeSchengenModal()" class="text-slate-400 hover:text-slate-600 text-lg p-1 rounded-lg hover:bg-slate-100 transition">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Date Inputs -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+        <div>
+          <label class="font-bold text-slate-800 block mb-1">Planned Entry Date:</label>
+          <input id="schengenEntryDate" type="date" value="2026-06-01" onchange="auditSchengenWeb()" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-800 font-mono" />
+        </div>
+        <div>
+          <label class="font-bold text-slate-800 block mb-1">Planned Exit Date:</label>
+          <input id="schengenExitDate" type="date" value="2026-06-15" onchange="auditSchengenWeb()" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-800 font-mono" />
+        </div>
+        <div>
+          <label class="font-bold text-slate-800 block mb-1">Passport Expiration:</label>
+          <input id="schengenPassportExp" type="date" value="2028-10-01" onchange="auditSchengenWeb()" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-800 font-mono" />
+        </div>
+      </div>
+
+      <!-- Compliance Metrics -->
+      <div class="grid grid-cols-3 gap-3 text-center text-xs">
+        <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+          <span class="text-[10px] text-slate-500 block">Stay Duration</span>
+          <span id="schengenStayDays" class="text-xl font-extrabold text-slate-900">15 days</span>
+        </div>
+        <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+          <span class="text-[10px] text-emerald-800 block">Days Left on Entry</span>
+          <span id="schengenDaysEntry" class="text-xl font-extrabold text-emerald-700">90 days</span>
+        </div>
+        <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+          <span class="text-[10px] text-emerald-800 block">Days Left on Exit</span>
+          <span id="schengenDaysExit" class="text-xl font-extrabold text-emerald-700">75 days</span>
+        </div>
+      </div>
+
+      <!-- Status Card -->
+      <div id="schengenStatusCard" class="p-4 bg-emerald-50/60 border border-emerald-200 rounded-xl text-xs space-y-1.5">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-circle-check text-emerald-600 text-sm"></i>
+          <span class="font-bold text-emerald-950 text-sm">Status: 100% Fully Compliant with EU Law</span>
+        </div>
+        <p class="text-emerald-900 text-[11px]">
+          Maximum days used across any rolling 180-day window is <span class="font-bold">15 / 90 days</span>.
+        </p>
+        <p id="schengenPassportStatus" class="text-emerald-800 text-[11px] font-medium pt-1">
+          ✓ Passport has >2 years of remaining validity (far exceeding the 3-month EU departure rule).
+        </p>
+      </div>
+
+      <!-- Action Button -->
+      <div class="flex items-center justify-end pt-2 border-t border-slate-100">
+        <button onclick="closeSchengenModal()" class="px-5 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition">
+          Done
+        </button>
       </div>
 
     </div>

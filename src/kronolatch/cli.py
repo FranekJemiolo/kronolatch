@@ -20,7 +20,9 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from kronolatch.calendar_export import CalendarExporter
 from kronolatch.dag_engine import calculate_transition_time, optimize_and_cut, validate_dag
+from kronolatch.graph import CriticalPathEngine
 from kronolatch.ingest import TicketIngestor
 from kronolatch.ledger import settle_expenses
 from kronolatch.live_transit import LiveTransitClient
@@ -33,8 +35,12 @@ from kronolatch.models import (
     TripDAG,
     TripNode,
     VerificationStatus,
+    minutes_to_time_str,
+    time_str_to_minutes,
 )
 from kronolatch.planner import TripPlanner, WishlistRequest
+from kronolatch.receipt import ReceiptSplitter
+from kronolatch.schengen import SchengenCalculator, StayInterval
 from kronolatch.sheets import (
     export_expenses_to_csv,
     export_itinerary_to_csv,
@@ -43,6 +49,8 @@ from kronolatch.sheets import (
     parse_expenses_csv,
     parse_itinerary_csv,
 )
+from kronolatch.simulation import MonteCarloSimulator, SimulationParameters
+from kronolatch.solar import SolarEngine
 from kronolatch.sync import SyncEngine
 from kronolatch.verifier import verify_vendor_url
 
@@ -1077,6 +1085,560 @@ def plan(
         target = Path(out_file)
         target.write_text(json.dumps(trip.model_dump(mode="json"), indent=2), encoding="utf-8")
         console.print(f"[bold green]✓ Saved planned trip DAG to {target}[/bold green]")
+
+
+@app.command("simulate")
+def simulate(
+    trip_path: Optional[str] = typer.Option(
+        None,
+        "--trip",
+        "-t",
+        help="Path to trip JSON file (defaults to Rome & Florence express)",
+    ),
+    iterations: int = typer.Option(
+        2500,
+        "--iterations",
+        "-n",
+        help="Number of simulated trip runs (e.g. 1000, 2500, 10000)",
+    ),
+    confidence: float = typer.Option(
+        0.95,
+        "--confidence",
+        "-c",
+        help="Target reliability threshold (e.g. 0.95 for 95% on-time confidence)",
+    ),
+    seed: Optional[int] = typer.Option(
+        None,
+        "--seed",
+        help="Deterministic random seed for testing",
+    ),
+):
+    """
+    Execute Monte Carlo delay stress-testing across all transit legs in the trip DAG.
+    Computes Trip Fragility Score, delay percentiles, and recommended risk cushions.
+    """
+    trip = load_or_create_sample_dag(trip_path)
+
+    sim_params = SimulationParameters(
+        iterations=iterations,
+        target_confidence=confidence,
+        seed=seed,
+    )
+
+    result = MonteCarloSimulator.run_simulation(trip, sim_params)
+
+    status_color = "bold green" if result.is_robust else "bold red"
+    status_label = "ROBUST" if result.is_robust else "FRAGILE / HIGH RISK"
+
+    console.print(
+        Panel.fit(
+            f"[bold cyan]KronoLatch Monte Carlo Transit Simulator[/bold cyan]\n\n"
+            f"[dim]Trip Destination:[/dim] {trip.destination}\n"
+            f"[dim]Simulated Runs:[/dim] {result.iterations:,} journeys in {result.simulation_duration_ms:.1f}ms\n"
+            f"[dim]Target Reliability:[/dim] {result.target_confidence * 100:.1f}%\n"
+            f"[dim]Trip Fragility Score:[/dim] [{status_color}]{result.trip_fragility_score:.1f}% Miss Rate ({status_label})[/{status_color}]\n"
+            f"[dim]Current Risk Cushion (α):[/dim] {result.current_risk_multiplier:.2f} | "
+            f"[dim]Recommended α*:[/dim] [bold yellow]{result.recommended_risk_multiplier:.2f}[/bold yellow]",
+            border_style="cyan",
+        )
+    )
+
+    # Delay Percentiles Table
+    percentile_table = Table(
+        title="[bold blue]Stochastic Delay Percentiles Across Entire Trip[/bold blue]",
+        show_header=True,
+        header_style="bold cyan",
+    )
+    percentile_table.add_column("Percentile", style="white")
+    percentile_table.add_column("Expected Cumulative Delay", style="yellow")
+    percentile_table.add_column("Description", style="dim")
+
+    percentile_table.add_row(
+        "P50 (Median)", f"+{result.p50_total_delay:.1f} min", "Typical transit journey variance"
+    )
+    percentile_table.add_row(
+        "P80 (Heavy)",
+        f"+{result.p80_total_delay:.1f} min",
+        "Moderate bottlenecks & platform congestion",
+    )
+    percentile_table.add_row(
+        "P95 (Severe)",
+        f"+{result.p95_total_delay:.1f} min",
+        "Significant transit stoppage / highway gridlock",
+    )
+    percentile_table.add_row(
+        "P99 (Extreme)",
+        f"+{result.p99_total_delay:.1f} min",
+        "Catastrophic rail / flight disruption",
+    )
+
+    console.print(percentile_table)
+
+    # Critical Nodes Table if any missed
+    if result.critical_nodes:
+        node_table = Table(
+            title="[bold red]Vulnerable Fixed Reservations (Miss Rates)[/bold red]",
+            show_header=True,
+            header_style="bold red",
+        )
+        node_table.add_column("Node ID", style="bold white")
+        node_table.add_column("Attraction / Milestone", style="white")
+        node_table.add_column("Miss Probability", style="bold red")
+
+        for nid in result.critical_nodes:
+            node_obj = next((n for n in trip.nodes if n.id == nid), None)
+            title = node_obj.title if node_obj else nid
+            rate = result.node_miss_rates.get(nid, 0.0)
+            node_table.add_row(nid, title, f"{rate:.1f}%")
+
+        console.print(node_table)
+    else:
+        console.print(
+            "[bold green]✓ Zero fixed bookings were missed across all simulated runs![/bold green]"
+        )
+
+    if not result.is_robust:
+        console.print(
+            f"\n[bold yellow]⚠ Recommendation:[/bold yellow] To achieve {result.target_confidence * 100:.0f}% confidence, "
+            f"increase transit risk buffer from [bold white]{result.current_risk_multiplier:.2f}[/bold white] to "
+            f"[bold green]{result.recommended_risk_multiplier:.2f}[/bold green] (or pad departure times before {result.critical_nodes[0] if result.critical_nodes else 'fixed stops'})."
+        )
+
+
+@app.command("solar-audit")
+def solar_audit(
+    trip_path: Optional[str] = typer.Option(
+        None,
+        "--trip",
+        "-t",
+        help="Path to trip JSON file (defaults to Rome & Florence express)",
+    ),
+    date_str: Optional[str] = typer.Option(
+        None,
+        "--date",
+        "-d",
+        help="Target travel date in YYYY-MM-DD format (defaults to current date)",
+    ),
+    rain_probability: float = typer.Option(
+        0.0,
+        "--rain-prob",
+        "-r",
+        help="Precipitation probability between 0.0 and 1.0 (>=0.40 applies weather buffer)",
+    ),
+):
+    """
+    Perform astronomical solar position and daylight audit on the trip DAG.
+    Calculates exact sunrise, golden hour, and sunset using NOAA equations to prevent scheduling outdoor venues in darkness.
+    """
+    import datetime
+
+    trip = load_or_create_sample_dag(trip_path)
+
+    d_val = None
+    if date_str:
+        try:
+            d_val = datetime.date.fromisoformat(date_str)
+        except ValueError:
+            console.print(
+                f"[bold red]Invalid date format '{date_str}', expected YYYY-MM-DD[/bold red]"
+            )
+            raise typer.Exit(1)
+
+    audit = SolarEngine.audit_trip_daylight(trip, date_val=d_val, rain_probability=rain_probability)
+    sched = audit.solar_schedule
+
+    console.print(
+        Panel.fit(
+            f"[bold cyan]Astronomical Solar & Daylight Audit Engine (NOAA)[/bold cyan]\n\n"
+            f"[dim]Destination:[/dim] {trip.destination} (Lat: {sched.latitude}, Lon: {sched.longitude})\n"
+            f"[dim]Travel Date:[/dim] {sched.date} | [dim]Daylight Duration:[/dim] {sched.day_length_min // 60}h {sched.day_length_min % 60}m\n\n"
+            f"🌅 [bold yellow]Sunrise:[/bold yellow] {sched.sunrise_time}  |  "
+            f"☀️ [bold yellow]Solar Noon:[/bold yellow] {sched.solar_noon}  |  "
+            f"📸 [bold magenta]Golden Hour:[/bold magenta] {sched.golden_hour_start} → {sched.golden_hour_end}\n"
+            f"🌇 [bold red]Civil Sunset:[/bold red] {sched.sunset_time}  |  "
+            f"🌑 [bold blue]Civil Twilight End:[/bold blue] {sched.civil_twilight_end}",
+            border_style="cyan",
+        )
+    )
+
+    # Outdoor venue audit table
+    table = Table(
+        title="[bold green]Outdoor Sightseeing & Activity Daylight Status[/bold green]",
+        show_header=True,
+        header_style="bold cyan",
+    )
+    table.add_column("Activity / Venue", style="bold white", width=36)
+    table.add_column("Category", style="cyan")
+    table.add_column("Scheduled Window", style="yellow")
+    table.add_column("Solar Condition", style="bold")
+
+    active_nodes = [n for n in trip.nodes if n.active]
+    first_start = active_nodes[0].get_effective_fixed_start_min() if active_nodes else 8 * 60
+    cursor = first_start if first_start is not None else 8 * 60
+
+    sunset_m = time_str_to_minutes(sched.sunset_time)
+    twilight_m = time_str_to_minutes(sched.civil_twilight_end)
+
+    for idx, node in enumerate(active_nodes):
+        if idx > 0:
+            cursor += node.transit_min + 15
+        start_m = (
+            node.get_effective_fixed_start_min()
+            if node.type == NodeType.FIXED and node.get_effective_fixed_start_min() is not None
+            else cursor
+        )
+        end_m = start_m + node.duration_min
+        cursor = end_m
+
+        is_outdoor = (
+            node.category in (Category.SIGHTSEEING, Category.WALK)
+            and "indoor" not in node.title.lower()
+            and "museum" not in node.title.lower()
+            and "gallery" not in node.title.lower()
+        )
+        if not is_outdoor:
+            continue
+
+        window_str = f"{minutes_to_time_str(start_m)} – {minutes_to_time_str(end_m)}"
+
+        if end_m > twilight_m:
+            cond_str = "[bold red]🌑 TOTAL DARKNESS (VIOLATION)[/bold red]"
+        elif end_m > sunset_m:
+            cond_str = "[bold yellow]🌇 PAST SUNSET (TWILIGHT)[/bold yellow]"
+        elif sched.is_golden_hour(minutes_to_time_str(start_m)):
+            cond_str = "[bold magenta]📸 GOLDEN HOUR OPTIMAL[/bold magenta]"
+        else:
+            cond_str = "[bold green]☀️ FULL DAYLIGHT[/bold green]"
+
+        table.add_row(node.title, node.category.value.upper(), window_str, cond_str)
+
+    console.print(table)
+
+    if audit.twilight_violations:
+        console.print("\n[bold red]Darkness Violations Detected:[/bold red]")
+        for v in audit.twilight_violations:
+            console.print(f"  • [red]{v}[/red]")
+
+    if audit.sunset_warnings:
+        console.print("\n[bold yellow]Sunset & Twilight Notices:[/bold yellow]")
+        for w in audit.sunset_warnings:
+            console.print(f"  • [yellow]{w}[/yellow]")
+
+    if audit.recommendations:
+        console.print("\n[bold cyan]Solar & Meteorological Recommendations:[/bold cyan]")
+        for r in audit.recommendations:
+            console.print(f"  • [cyan]{r}[/cyan]")
+
+
+@app.command("graph")
+def graph(
+    trip_path: Optional[str] = typer.Option(
+        None,
+        "--trip",
+        "-t",
+        help="Path to trip JSON file (defaults to Rome & Florence express)",
+    ),
+    threshold: int = typer.Option(
+        5,
+        "--threshold",
+        "-s",
+        help="Slack threshold in minutes to qualify as a critical bottleneck (default: 5m)",
+    ),
+    critical_only: bool = typer.Option(
+        False,
+        "--critical-only",
+        help="Display only nodes that sit on the zero-slack Critical Path",
+    ),
+):
+    """
+    Perform Critical Path Method (CPM) forward and backward topological pass on the trip DAG.
+    Calculates Earliest/Latest Start and Finish times and highlights zero-slack bottleneck edges.
+    """
+    trip = load_or_create_sample_dag(trip_path)
+    result = CriticalPathEngine.analyze_trip(trip, critical_slack_threshold_min=threshold)
+
+    console.print(
+        Panel.fit(
+            f"[bold cyan]KronoLatch Topological Critical Path Analyzer (CPM)[/bold cyan]\n\n"
+            f"[dim]Trip Destination:[/dim] {trip.destination}\n"
+            f"[dim]Total Planned Duration:[/dim] {result.total_duration_min // 60}h {result.total_duration_min % 60}m "
+            f"({minutes_to_time_str(result.node_metrics[0].earliest_start_min)} → {minutes_to_time_str(result.earliest_completion_min)})\n"
+            f"[dim]Critical Bottlenecks:[/dim] [bold red]{result.critical_nodes_count} node(s)[/bold red] with slack ≤ {threshold}m\n"
+            f"[dim]Total Float Cushion:[/dim] [bold green]{result.total_slack_cushion_min} min[/bold green] flexible leeway across trip",
+            border_style="cyan",
+        )
+    )
+
+    table = Table(
+        title="[bold green]Topological Node Schedule & Slack Cushion[/bold green]",
+        show_header=True,
+        header_style="bold cyan",
+    )
+    table.add_column("Node ID", style="bold white", width=8)
+    table.add_column("Stop / Attraction", style="white", width=34)
+    table.add_column("Type", style="cyan")
+    table.add_column("Earliest (ES → EF)", style="yellow")
+    table.add_column("Latest (LS → LF)", style="dim")
+    table.add_column("Slack (Float)", style="bold")
+    table.add_column("Path Status", style="bold")
+
+    for m in result.node_metrics:
+        if critical_only and not m.is_critical:
+            continue
+
+        es_str = f"{minutes_to_time_str(m.earliest_start_min)} → {minutes_to_time_str(m.earliest_finish_min)}"
+        ls_str = f"{minutes_to_time_str(m.latest_start_min)} → {minutes_to_time_str(m.latest_finish_min)}"
+
+        if m.total_float_min <= 5:
+            slack_str = f"[bold red]{m.total_float_min} min[/bold red]"
+            path_str = "[bold red]🔴 CRITICAL PATH[/bold red]"
+        elif m.total_float_min <= 20:
+            slack_str = f"[bold yellow]{m.total_float_min} min[/bold yellow]"
+            path_str = "[bold yellow]🟡 MODERATE SLACK[/bold yellow]"
+        else:
+            slack_str = f"[bold green]{m.total_float_min} min[/bold green]"
+            path_str = "[bold green]🟢 RELAXED CUSHION[/bold green]"
+
+        table.add_row(
+            m.node_id,
+            m.title,
+            m.node_type.value.upper(),
+            es_str,
+            ls_str,
+            slack_str,
+            path_str,
+        )
+
+    console.print(table)
+
+
+@app.command("split-receipt")
+def split_receipt(
+    receipt_input: str = typer.Argument(
+        ...,
+        help="Raw receipt text string or path to a text file containing line items and prices",
+    ),
+    payer: str = typer.Option(
+        "Franek",
+        "--payer",
+        "-p",
+        help="Name of the person who paid the bill",
+    ),
+    travelers: str = typer.Option(
+        "Franek, Anna, Marek, Kasia",
+        "--travelers",
+        "-t",
+        help="Comma-separated traveler names in the group",
+    ),
+    tip: float = typer.Option(
+        0.0,
+        "--tip",
+        help="Additional gratuity / tip added to bill",
+    ),
+    title: str = typer.Option(
+        "Group Restaurant Bill",
+        "--title",
+        help="Title or venue description of the bill",
+    ),
+    currency: str = typer.Option(
+        "EUR",
+        "--currency",
+        "-c",
+        help="Billing currency code",
+    ),
+    trip_path: Optional[str] = typer.Option(
+        None,
+        "--trip",
+        help="Optional trip DAG path to append generated itemized expenses into",
+    ),
+):
+    """
+    Parse an itemized restaurant receipt and calculate cent-exact proportional splits with distributed tax/tip.
+    """
+    # Read text or file
+    if len(receipt_input) < 255 and Path(receipt_input).is_file():
+        text_content = Path(receipt_input).read_text(encoding="utf-8")
+    else:
+        text_content = receipt_input
+
+    traveler_list = [t.strip() for t in travelers.split(",") if t.strip()]
+
+    bill = ReceiptSplitter.parse_receipt_text(
+        text=text_content,
+        payer=payer,
+        default_travelers=traveler_list,
+        title=title,
+        currency=currency,
+        tip=tip,
+    )
+
+    result = ReceiptSplitter.calculate_split(bill)
+
+    console.print(
+        Panel.fit(
+            f"[bold cyan]KronoLatch Itemized Receipt & Overhead Splitter[/bold cyan]\n\n"
+            f"[dim]Venue / Bill:[/dim] {result.title} (Paid by [bold white]{result.payer}[/bold white])\n"
+            f"[dim]Subtotal:[/dim] {result.subtotal:.2f} {result.currency} | "
+            f"[dim]Tax/Tip/Service Overhead:[/dim] +{result.overhead_total:.2f} {result.currency} (+{result.overhead_percentage:.1f}%)\n"
+            f"[dim]Total Bill Settled:[/dim] [bold green]{result.total_bill:.2f} {result.currency}[/bold green]",
+            border_style="cyan",
+        )
+    )
+
+    table = Table(
+        title="[bold green]Itemized Individual Liabilities (Cent-Exact Conservation)[/bold green]",
+        show_header=True,
+        header_style="bold cyan",
+    )
+    table.add_column("Traveler", style="bold white")
+    table.add_column("Liabilities (with Overhead)", style="yellow")
+    table.add_column("Percent Share", style="dim")
+
+    for t, amount in sorted(result.traveler_liabilities.items(), key=lambda x: x[1], reverse=True):
+        pct = (amount / result.total_bill * 100.0) if result.total_bill > 0 else 0.0
+        table.add_row(t, f"{amount:.2f} {result.currency}", f"{pct:.1f}%")
+
+    console.print(table)
+
+    # Append to trip if requested
+    if trip_path and Path(trip_path).is_file():
+        p = Path(trip_path)
+        with open(p, "r", encoding="utf-8") as f:
+            trip_data = json.load(f)
+        trip_obj = TripDAG.model_validate(trip_data)
+        trip_obj.expenses.extend(result.generated_expenses)
+        p.write_text(json.dumps(trip_obj.model_dump(mode="json"), indent=2), encoding="utf-8")
+        console.print(
+            f"[bold green]✓ Appended {len(result.generated_expenses)} itemized expenses to {p}[/bold green]"
+        )
+
+
+@app.command("schengen-audit")
+def schengen_audit(
+    entry_date: str = typer.Option(
+        "2026-06-01",
+        "--entry",
+        help="Planned Schengen entry date (YYYY-MM-DD)",
+    ),
+    exit_date: str = typer.Option(
+        "2026-06-15",
+        "--exit",
+        help="Planned Schengen exit date (YYYY-MM-DD)",
+    ),
+    past_stays_file: Optional[str] = typer.Option(
+        None,
+        "--past-stays",
+        help="Optional path to JSON file containing past entry/exit intervals",
+    ),
+    passport_expiry: Optional[str] = typer.Option(
+        None,
+        "--passport-expiry",
+        help="Passport expiration date (YYYY-MM-DD)",
+    ),
+):
+    """
+    Evaluate 90/180-day short-stay visa compliance and passport validity under EU Regulation 2016/399.
+    Runs 100% locally with zero cloud telemetry.
+    """
+    past_stays: List[StayInterval] = []
+    if past_stays_file and Path(past_stays_file).is_file():
+        with open(past_stays_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, list):
+                past_stays = [StayInterval.model_validate(item) for item in data]
+
+    planned = StayInterval(entry_date=entry_date, exit_date=exit_date)
+    audit = SchengenCalculator.audit_stay(
+        past_stays=past_stays,
+        planned_stay=planned,
+        passport_expiry_date=passport_expiry,
+    )
+
+    status_color = "bold green" if audit.is_compliant else "bold red"
+    status_label = (
+        "COMPLIANT (LEGAL)"
+        if audit.is_compliant
+        else f"OVERSTAY DETECTED (+{audit.overstay_days} DAYS)"
+    )
+
+    console.print(
+        Panel.fit(
+            f"[bold cyan]KronoLatch Schengen 90/180-Day Compliance Vault[/bold cyan]\n[dim]Regulation (EU) 2016/399[/dim]\n\n"
+            f"[dim]Planned Stay:[/dim] {planned.entry_date} → {planned.exit_date} ({audit.planned_stay_days} days)\n"
+            f"[dim]Historical Schengen Days Used:[/dim] {audit.total_past_days} days\n"
+            f"[dim]Compliance Status:[/dim] [{status_color}]{status_label}[/{status_color}]\n\n"
+            f"📅 [dim]Days Remaining on Entry:[/dim] [bold green]{audit.days_remaining_on_entry} days[/bold green]\n"
+            f"📅 [dim]Days Remaining on Exit:[/dim] [bold {'green' if audit.days_remaining_on_exit > 0 else 'red'}]{audit.days_remaining_on_exit} days[/bold {'green' if audit.days_remaining_on_exit > 0 else 'red'}]\n"
+            f"📊 [dim]Max Days Used in Any 180-Day Window:[/dim] [bold {'yellow' if audit.max_days_used_in_window <= 90 else 'red'}]{audit.max_days_used_in_window} / 90 days[/bold {'yellow' if audit.max_days_used_in_window <= 90 else 'red'}]",
+            border_style="cyan",
+        )
+    )
+
+    if audit.earliest_reentry_date:
+        console.print(
+            f"[bold yellow]Notice: Earliest legal re-entry date after this stay: {audit.earliest_reentry_date}[/bold yellow]"
+        )
+
+    if not audit.passport_valid and audit.passport_warning:
+        console.print(
+            f"\n[bold red]🛂 PASSPORT VALIDITY ALERT:[/bold red] {audit.passport_warning}"
+        )
+    elif audit.passport_valid and passport_expiry:
+        console.print(
+            f"[bold green]✓ Passport expiration ({passport_expiry}) meets EU 3-month departure buffer rule.[/bold green]"
+        )
+
+
+@app.command("export-ics")
+def export_ics(
+    trip_path: Optional[str] = typer.Option(
+        None,
+        "--trip",
+        "-t",
+        help="Path to trip JSON file (defaults to Rome & Florence express)",
+    ),
+    out_file: str = typer.Option(
+        "./trip-schedule.ics",
+        "--out",
+        "-o",
+        help="Output destination path for the .ics calendar file",
+    ),
+    date_str: Optional[str] = typer.Option(
+        None,
+        "--date",
+        "-d",
+        help="Base travel date in YYYY-MM-DD format (defaults to 2026-06-15)",
+    ),
+):
+    """
+    Export the verified TripDAG itinerary into a standard RFC 5545 iCalendar (.ics) file.
+    Includes buffer-aware VALARM reminder alarms for airport and platform departure transitions.
+    """
+    import datetime
+
+    trip = load_or_create_sample_dag(trip_path)
+
+    d_val = None
+    if date_str:
+        try:
+            d_val = datetime.date.fromisoformat(date_str)
+        except ValueError:
+            console.print(
+                f"[bold red]Invalid date format '{date_str}', expected YYYY-MM-DD[/bold red]"
+            )
+            raise typer.Exit(1)
+
+    target_path = CalendarExporter.export_to_file(trip, out_file, base_date=d_val)
+    console.print(
+        Panel.fit(
+            f"[bold green]✓ RFC 5545 iCalendar Export Completed[/bold green]\n\n"
+            f"[dim]Trip Title:[/dim] {trip.title}\n"
+            f"[dim]Target File:[/dim] {target_path.resolve()}\n"
+            f"[dim]Events Exported:[/dim] {len([n for n in trip.nodes if n.active])} timeline nodes\n"
+            f"[dim]Features:[/dim] Transition-aware VALARM alarms (-120m flights, -25m trains) & PNR links",
+            border_style="green",
+        )
+    )
 
 
 @app.command()
