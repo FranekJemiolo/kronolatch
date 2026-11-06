@@ -15,10 +15,16 @@ keywords = [
     "anti-phishing",
     "ticket-verification",
     "expense-splitter",
+    "offline-first",
+    "monte-carlo-simulation",
+    "schengen-calculator",
+    "rfc-5545",
+    "travel-tech",
     "agentic-ai",
     "gemini",
     "antigravity"
 ]
+
 dependencies = [
     "pydantic>=2.7.0",
     "typer>=0.12.3",
@@ -26,6 +32,11 @@ dependencies = [
     "httpx>=0.27.0",
     "pypdf>=4.0.0",
 ]
+
+[project.urls]
+Homepage = "https://franekjemiolo.github.io/kronolatch/"
+Repository = "https://github.com/FranekJemiolo/kronolatch"
+Documentation = "https://github.com/FranekJemiolo/kronolatch#readme"
 
 [project.optional-dependencies]
 dev = [
