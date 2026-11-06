@@ -179,3 +179,17 @@ Each of the 4 core test assertions specified in the project requirements has bee
 - **Input:** Messy confirmation text for flight + train + hotel.
 - **Result:** Normalized into JSON strictly conforming to `schemas/trip-dag.schema.json` with mandatory 120m airport buffer and 15m rail buffer configured.
 - **Status:** **PASS**
+
+---
+
+## 6. Next-Horizon Roadmap & Strategic Extensions
+
+To expand KronoLatch while preserving its core **offline-first, zero-cloud-cost, deterministic-first** philosophy, an extended architectural plan has been developed in [`docs/EXTENDED_HORIZON_PLAN.md`](file:///Users/franek/personal_workspace/kronolatch/docs/EXTENDED_HORIZON_PLAN.md):
+
+1. **Phase 6: Stochastic Itinerary Simulation & Monte Carlo Delay Stress-Testing:** Empirically models transit variance (log-normal flight delays, gamma train delays) across 2,500 trials to compute the *Trip Fragility Index* and calculate optimal risk multipliers ($\alpha^*_{\text{risk}}$).
+2. **Phase 7: Solar, Daylight & Meteorological Leeway Engine:** Deterministic astronomical solar position calculator (sunrise, sunset, golden hour) to prevent scheduling outdoor monuments in total darkness, with dynamic precipitation buffer padding.
+3. **Phase 8: Interactive Critical-Path Graph Visualizer & Topology Inspector:** Critical Path Method (CPM) forward/backward pass algorithm revealing zero-slack bottleneck edges and rendering interactive SVG/canvas DAG graphs.
+4. **Phase 9: Itemized Receipt Splitting & Multimodal OCR Ingestion:** Line-item breakdown of restaurant bills with exact proportional distribution of tax and tip across custom subsets of diners.
+5. **Phase 10: Schengen 90/180-Day Rule & Zero-Cloud Visa Compliance Vault:** Strict offline rolling 180-day compliance calculator complying with EU Regulation (EU) 2016/399 and passport validity checkers.
+6. **Phase 11: Standard RFC 5545 iCalendar (`.ics`) & Mobile Wallet Export:** Native calendar generation with transition-aware alarms triggering ahead of computed physical buffers.
+

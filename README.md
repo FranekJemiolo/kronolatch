@@ -11,6 +11,7 @@
 
 **Live Application:** 🌐 [https://franekjemiolo.github.io/kronolatch/](https://franekjemiolo.github.io/kronolatch/)  
 **Architectural Vision & Audit Matrix:** 📄 [`docs/VISION.md`](docs/VISION.md)  
+**Extended Horizon Implementation Plan:** 🚀 [`docs/EXTENDED_HORIZON_PLAN.md`](docs/EXTENDED_HORIZON_PLAN.md)  
 **Portable AI Skills:** 🤖 [`skills/`](skills/)
 
 ---
