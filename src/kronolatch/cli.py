@@ -34,6 +34,7 @@ from kronolatch.models import (
     TripNode,
     VerificationStatus,
 )
+from kronolatch.planner import TripPlanner, WishlistRequest
 from kronolatch.sheets import (
     export_expenses_to_csv,
     export_itinerary_to_csv,
@@ -959,6 +960,123 @@ def sync(
             border_style="green",
         )
     )
+
+
+@app.command("plan")
+def plan(
+    destination: str = typer.Argument(
+        ..., help="Target destination or corridor (e.g. 'Rome & Florence' or 'Classic Tuscany')"
+    ),
+    wishlist: str = typer.Option(
+        "Colosseum, Pantheon, Vatican Museums, Trastevere Lunch, Uffizi Gallery",
+        "--wishlist",
+        "-w",
+        help="List of attractions, monuments, or activities to see",
+    ),
+    travelers: str = typer.Option(
+        "Franek, Anna, Marek, Kasia",
+        "--travelers",
+        "-t",
+        help="Comma-separated traveler names",
+    ),
+    pace: str = typer.Option(
+        "moderate",
+        "--pace",
+        "-p",
+        help="Tour pacing profile: 'relaxed', 'moderate', or 'fast-paced'",
+    ),
+    transport: str = typer.Option(
+        "mixed_car_and_rail",
+        "--transport",
+        "-m",
+        help="Transit style: 'transit_and_walk', 'mixed_car_and_rail', or 'driving_focus'",
+    ),
+    start_time: str = typer.Option(
+        "09:00",
+        "--start-time",
+        help="Morning starting time in HH:MM format",
+    ),
+    out_file: Optional[str] = typer.Option(
+        None,
+        "--out",
+        "-o",
+        help="File path to save the generated trip-dag.json",
+    ),
+):
+    """
+    Synthesize an entire tour itinerary from a natural language wishlist.
+    Anchors official ticketing portals, injects dynamic transit buffers, and allocates subgroup expenses.
+    """
+    traveler_list = [t.strip() for t in travelers.split(",") if t.strip()]
+    pace_val = pace if pace in ("relaxed", "moderate", "fast-paced") else "moderate"
+    transport_val = (
+        transport
+        if transport in ("transit_and_walk", "mixed_car_and_rail", "driving_focus")
+        else "mixed_car_and_rail"
+    )
+
+    req = WishlistRequest(
+        destination=destination,
+        wishlist_text=wishlist,
+        travelers=traveler_list,
+        pace=pace_val,
+        transport_mode=transport_val,
+        start_time=start_time,
+    )
+
+    trip = TripPlanner.generate_trip(req)
+
+    # Display synthesis results
+    console.print(
+        Panel.fit(
+            f"[bold cyan]KronoLatch Tour Synthesis Engine[/bold cyan]\n\n"
+            f"[dim]Destination:[/dim] {trip.destination}\n"
+            f"[dim]Travelers ({len(trip.travelers)}):[/dim] {', '.join(trip.travelers)}\n"
+            f"[dim]Profile:[/dim] Pace = {pace.upper()} | Transit = {transport.upper()}\n"
+            f"[dim]Planned Stops:[/dim] {len(trip.nodes)} entities | [dim]Group Expenses:[/dim] {len(trip.expenses)} items",
+            border_style="cyan",
+        )
+    )
+
+    # Itinerary Table
+    table = Table(
+        title="[bold green]Generated Itinerary Graph (Timed with Buffers)[/bold green]",
+        show_header=True,
+        header_style="bold cyan",
+    )
+    table.add_column("Stop / Attraction", style="bold white", width=34)
+    table.add_column("Type", style="cyan")
+    table.add_column("Dwell", style="yellow")
+    table.add_column("Transit Buffer", style="magenta")
+    table.add_column("Official Booking Portal", style="green")
+
+    for n in trip.nodes:
+        dwell_str = f"{n.duration_min}m"
+        buffer_str = f"{n.transit_min}m ({n.transit_mode.value})" if n.transit_min else "—"
+        portal_str = n.official_domain or "[dim]Walk / Open Access[/dim]"
+        table.add_row(
+            n.title,
+            n.type.value.upper(),
+            dwell_str,
+            buffer_str,
+            portal_str,
+        )
+
+    console.print(table)
+
+    # Validate against DAG engine
+    audit = validate_dag(trip)
+    status_color = "bold green" if audit.is_valid else "bold red"
+    console.print(
+        f"\n[{status_color}]DAG Mathematical Validation: {'VALID (0 Conflicts)' if audit.is_valid else 'CONFLICTS DETECTED'}[/{status_color}] "
+        f"(Total Sightseeing: {audit.total_sightseeing_min}m | Buffer Cushion: {audit.total_buffer_min}m)"
+    )
+
+    # Output file if requested
+    if out_file:
+        target = Path(out_file)
+        target.write_text(json.dumps(trip.model_dump(mode="json"), indent=2), encoding="utf-8")
+        console.print(f"[bold green]✓ Saved planned trip DAG to {target}[/bold green]")
 
 
 @app.command()

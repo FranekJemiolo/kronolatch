@@ -78,7 +78,7 @@ KronoLatch is managed with [`uv`](https://github.com/astral-sh/uv).
 git clone https://github.com/FranekJemiolo/kronolatch.git
 cd kronolatch
 
-# Run automated unit tests (28/28 passing)
+# Run automated unit tests (31/31 passing)
 uv run pytest
 
 # Run on-demand architectural self-test suite (4/4 passing)
@@ -86,6 +86,15 @@ uv run kronolatch self-test
 ```
 
 ### 2. CLI Usage Examples
+
+#### AI Wishlist Tour Planner & Research Engine
+```bash
+# Synthesize an entire itinerary DAG from a natural language wishlist with anchored official ticket links and dynamic buffers
+uv run kronolatch plan "Rome & Florence" -w "Colosseum, Vatican Museums, Pantheon, Uffizi Gallery" --pace moderate --transport mixed_car_and_rail
+
+# Export planned tour directly to JSON
+uv run kronolatch plan "Classic Rome" -w "Colosseum, Trevi Fountain, Trastevere Lunch" --out ./rome-trip.json
+```
 
 #### Zero-Cloud Ticket & PDF Ingestion
 ```bash

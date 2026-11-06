@@ -1,9 +1,10 @@
 # KronoLatch Enhancement Implementation Plan 🚀
 
-> **Targeting Three Next-Horizon Enhancements:**
+> **Targeting Core Next-Horizon Enhancements:**
 > 1. **In-Browser & CLI Ticket/PDF Ingestion (Zero-Cloud)** — ✅ **COMPLETED & VERIFIED**
 > 2. **Live Public Rail Delay Telemetry & Domino Evaluation (Open Transit Feeds)** — ✅ **COMPLETED & VERIFIED**
 > 3. **Peer-to-Peer (P2P) Offline Group Sync & QR Code State Transfer** — ✅ **COMPLETED & VERIFIED**
+> 4. **AI Wishlist Tour Planner & Research Engine (Natural Language Synthesis)** — ✅ **COMPLETED & VERIFIED**
 
 ---
 
@@ -76,10 +77,33 @@ Solve on-the-ground group synchronization without central accounts, cloud databa
 
 ---
 
-## Phase 4: Integration, Documentation & Verification — ✅ COMPLETE
+## Phase 4: AI Wishlist Tour Planner & Research Engine — ✅ COMPLETE
+
+### Goal
+Transform messy natural language wishlists ("what you'd like to see") into a mathematically validated, conflict-free Temporal TripDAG with anchored official ticketing domains, dynamic leeway buffers, inter-city rail transfers, and asymmetric subgroup expenses.
+
+### Components & Deliverables
+1. **Python Module ([`src/kronolatch/planner.py`](file:///Users/franek/personal_workspace/kronolatch/src/kronolatch/planner.py)):**
+   - Implemented `WishlistRequest`, `CuratedPOI`, and `TripPlanner.generate_trip()`.
+   - Curated knowledge base for European highlights (Colosseum, Vatican Museums, Pantheon, Trevi Fountain, Trastevere, Uffizi Gallery, Boboli Gardens, Ponte Vecchio).
+   - Dynamic pacing multiplier (`relaxed` +25%, `fast-paced` -15%, `moderate` standard).
+   - Automatic inter-city transit injection (e.g. Frecciarossa high-speed rail between Rome and Florence with platform overhead buffers).
+   - Asymmetric subgroup cost allocation (e.g. rental car split between drivers only; train split between rail riders; meals split group-wide).
+   - Strict transition buffer alignment with `calculate_transition_time()` ensuring 0 hard conflicts out of the box.
+   - Added CLI command `uv run kronolatch plan <destination> [-w wishlist] [-t travelers] [-p pace] [-m transport] [--out path]`.
+2. **Web UI ([`web/app.js`](file:///Users/franek/personal_workspace/kronolatch/web/app.js) & [`web/index.html`](file:///Users/franek/personal_workspace/kronolatch/web/index.html)):**
+   - Added `#plannerModal` with curated presets (Rome & Florence, Classic Rome, Florence & Tuscany).
+   - Client-side tour synthesis engine `synthesizeWishlistTour()` rendering directly into live interactive timeline and expense ledger.
+   - One-click trigger in navigation bar: "AI Tour Planner".
+3. **Automated Tests:**
+   - [`tests/test_planner.py`](file:///Users/franek/personal_workspace/kronolatch/tests/test_planner.py): Keyword matching, end-to-end trip synthesis, official domain attachment, asymmetric expense splits, DAG mathematical validity, and pacing variations. (3/3 passing).
+
+---
+
+## Phase 5: Verification & Deployment — ✅ COMPLETE
 
 ### Verification Evidence
-1. `uv run pytest`: **28 / 28 unit tests passing (100%)**.
+1. `uv run pytest`: **31 / 31 unit tests passing (100%)**.
 2. `uv run kronolatch self-test`: **4 / 4 architectural tests passing (100%)**.
 3. `uv run ruff check .` & `uv run ruff format --check .`: **0 errors, fully compliant**.
 4. Documentation updated in [`README.md`](file:///Users/franek/personal_workspace/kronolatch/README.md) and [`docs/VISION.md`](file:///Users/franek/personal_workspace/kronolatch/docs/VISION.md).

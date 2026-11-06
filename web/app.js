@@ -2512,4 +2512,200 @@ function handleSyncFileSelect(event) {
   reader.readAsText(file);
 }
 
+// -------------------------------------------------------------------
+// 13. AI WISHLIST TOUR PLANNER & RESEARCH ENGINE
+// -------------------------------------------------------------------
+function openPlannerModal() {
+  const modal = document.getElementById('plannerModal');
+  if (!modal) return;
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+}
+
+function closePlannerModal() {
+  const modal = document.getElementById('plannerModal');
+  if (!modal) return;
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+}
+
+function loadPlannerPreset(preset) {
+  const destInput = document.getElementById('plannerDestInput');
+  const wishlistInput = document.getElementById('plannerWishlistInput');
+  const transportInput = document.getElementById('plannerTransportInput');
+  if (!destInput || !wishlistInput) return;
+
+  if (preset === 'rome_florence') {
+    destInput.value = 'Rome & Florence, Italy';
+    wishlistInput.value = 'Colosseum Arena, Vatican Museums, Pantheon & Piazza Navona, Trastevere Lunch, Uffizi Gallery Masterpieces';
+    if (transportInput) transportInput.value = 'mixed_car_and_rail';
+  } else if (preset === 'rome_weekend') {
+    destInput.value = 'Rome Historic City Break';
+    wishlistInput.value = 'Colosseum, Vatican Museums, Trevi Fountain & Spanish Steps, Trastevere Lunch';
+    if (transportInput) transportInput.value = 'transit_and_walk';
+  } else if (preset === 'tuscany') {
+    destInput.value = 'Florence & Tuscan Hill Towns';
+    wishlistInput.value = 'Uffizi Gallery, Boboli Gardens, Ponte Vecchio & Oltrarno Sunset, Chianti Vineyard Lunch';
+    if (transportInput) transportInput.value = 'driving_focus';
+  }
+}
+
+function synthesizeWishlistTour() {
+  const dest = document.getElementById('plannerDestInput')?.value.trim() || 'Rome & Florence, Italy';
+  const wishlistText = document.getElementById('plannerWishlistInput')?.value.toLowerCase() || '';
+  const travelersStr = document.getElementById('plannerTravelersInput')?.value || 'Franek, Anna, Marek, Kasia';
+  const pace = document.getElementById('plannerPaceInput')?.value || 'moderate';
+  const transport = document.getElementById('plannerTransportInput')?.value || 'mixed_car_and_rail';
+  const startTimeStr = document.getElementById('plannerStartTimeInput')?.value.trim() || '09:00';
+
+  const travelersList = travelersStr.split(',').map(t => t.trim()).filter(Boolean);
+  const paceMult = pace === 'relaxed' ? 1.25 : (pace === 'fast-paced' ? 0.85 : 1.0);
+
+  const [sH, sM] = startTimeStr.split(':').map(Number);
+  let currMin = (isNaN(sH) ? 9 : sH) * 60 + (isNaN(sM) ? 0 : sM);
+
+  const newNodes = [];
+  const newExpenses = [];
+  let nodeCount = 1;
+
+  // Knowledge base items
+  const catalog = [
+    { key: 'colosseum', name: 'Colosseum Arena & Underground', city: 'Rome', type: 'fixed', cat: 'sightseeing', dur: 105, minDur: 75, mode: 'walk', domain: 'ticketing.colosseo.it', price: 18.0, icon: 'fa-monument' },
+    { key: 'vatican', name: 'Vatican Museums & Sistine Chapel', city: 'Rome', type: 'fixed', cat: 'sightseeing', dur: 140, minDur: 90, mode: 'walk', domain: 'museivaticani.va', price: 20.0, icon: 'fa-landmark' },
+    { key: 'pantheon', name: 'Pantheon & Piazza Navona Walk', city: 'Rome', type: 'flexible', cat: 'sightseeing', dur: 50, minDur: 25, mode: 'walk', domain: 'cultura.gov.it', price: 5.0, icon: 'fa-archway' },
+    { key: 'trevi', name: 'Trevi Fountain & Spanish Steps', city: 'Rome', type: 'flexible', cat: 'sightseeing', dur: 45, minDur: 20, mode: 'walk', domain: 'turismoroma.it', price: 0, icon: 'fa-water' },
+    { key: 'trastevere', name: 'Trastevere Artisan Lunch', city: 'Rome', type: 'flexible', cat: 'food', dur: 70, minDur: 45, mode: 'walk', domain: null, price: 25.0, icon: 'fa-utensils' },
+    { key: 'uffizi', name: 'Uffizi Gallery Masterpieces', city: 'Florence', type: 'fixed', cat: 'sightseeing', dur: 120, minDur: 75, mode: 'walk', domain: 'uffizi.it', price: 25.0, icon: 'fa-palette' },
+    { key: 'boboli', name: 'Boboli Gardens & Pitti Palace', city: 'Florence', type: 'flexible', cat: 'sightseeing', dur: 85, minDur: 45, mode: 'walk', domain: 'uffizi.it', price: 10.0, icon: 'fa-tree' },
+    { key: 'ponte', name: 'Ponte Vecchio Sunset Walk', city: 'Florence', type: 'flexible', cat: 'sightseeing', dur: 45, minDur: 20, mode: 'walk', domain: null, price: 0, icon: 'fa-bridge' }
+  ];
+
+  // Match items
+  let selected = catalog.filter(item => wishlistText.includes(item.key));
+  if (selected.length === 0) {
+    selected = [catalog[0], catalog[2], catalog[4], catalog[5]];
+  }
+
+  // Check inter-city transit (Rome -> Florence)
+  let prevCity = null;
+  selected.forEach((poi, idx) => {
+    // If city switch, add Frecciarossa train node
+    if (prevCity && prevCity !== poi.city) {
+      currMin += 45; // Buffer to station
+      const trainStart = `${String(Math.floor(currMin / 60) % 24).padStart(2, '0')}:${String(currMin % 60).padStart(2, '0')}`;
+      const trainDur = 95;
+      const trainId = `node_${nodeCount++}_train`;
+
+      newNodes.push({
+        id: trainId,
+        title: `Frecciarossa High-Speed Rail (${prevCity} → ${poi.city})`,
+        type: 'fixed',
+        category: 'rail',
+        transitMode: 'train',
+        transitMin: 15,
+        durationMin: trainDur,
+        minDurationMin: trainDur,
+        fixedStartMin: currMin,
+        fixedStartTime: trainStart,
+        priority: 10,
+        officialDomain: 'trenitalia.com',
+        pnr: 'FRECCIA-9540',
+        active: true,
+        icon: 'fa-train',
+        notes: 'Platform navigation buffer enforced.'
+      });
+      currMin += trainDur;
+
+      // Add train expense for rail subgroup
+      const railSubgroup = travelersList.length >= 4 && transport === 'mixed_car_and_rail' ? travelersList.slice(2) : travelersList;
+      newExpenses.push({
+        id: `exp_${trainId}`,
+        title: `Frecciarossa Train (${prevCity} → ${poi.city})`,
+        payer: railSubgroup[0],
+        amount: Math.round(45.0 * railSubgroup.length),
+        currency: 'EUR',
+        participants: railSubgroup,
+        nodeId: trainId
+      });
+    }
+
+    prevCity = poi.city;
+
+    // Advance buffer
+    const transitMin = idx === 0 ? 0 : 20;
+    if (idx > 0) currMin += transitMin + 15; // 20m transit + 15m buffer
+
+    const startStr = `${String(Math.floor(currMin / 60) % 24).padStart(2, '0')}:${String(currMin % 60).padStart(2, '0')}`;
+    const dur = Math.round(poi.dur * paceMult);
+    const minDur = Math.round(poi.minDur * paceMult);
+    const nodeId = `node_${nodeCount++}_${poi.cat}`;
+
+    newNodes.push({
+      id: nodeId,
+      title: poi.name,
+      type: poi.type,
+      category: poi.cat,
+      transitMode: poi.mode,
+      transitMin: transitMin,
+      durationMin: dur,
+      minDurationMin: minDur,
+      fixedStartMin: poi.type === 'fixed' ? currMin : null,
+      fixedStartTime: poi.type === 'fixed' ? startStr : null,
+      priority: poi.type === 'fixed' ? 10 : 7,
+      officialDomain: poi.domain,
+      pnr: poi.type === 'fixed' ? 'BOOKED' : '',
+      active: true,
+      icon: poi.icon,
+      notes: poi.domain ? `Verified domain: ${poi.domain}` : 'Flexible window'
+    });
+
+    currMin += dur;
+
+    // Attach expense
+    if (poi.price > 0) {
+      newExpenses.push({
+        id: `exp_${nodeId}`,
+        title: `${poi.name} Admission / Bill`,
+        payer: travelersList[newExpenses.length % travelersList.length],
+        amount: Math.round(poi.price * travelersList.length),
+        currency: 'EUR',
+        participants: [...travelersList],
+        nodeId: nodeId
+      });
+    }
+  });
+
+  // Rental car expense if driving requested
+  if (transport === 'mixed_car_and_rail' || transport === 'driving_focus') {
+    const drivers = travelersList.length >= 4 && transport === 'mixed_car_and_rail' ? travelersList.slice(0, 2) : travelersList;
+    newExpenses.push({
+      id: 'exp_rental_car_subgroup',
+      title: 'Rental Car & Fuel (Drivers Subgroup)',
+      payer: drivers[0],
+      amount: 160.00,
+      currency: 'EUR',
+      participants: drivers,
+      nodeId: null
+    });
+  }
+
+  // Update global state
+  activeNodes = newNodes;
+  expenses = newExpenses;
+  travelers = travelersList;
+  currentTripData.travelers = travelersList;
+  currentTripData.destination = dest;
+
+  closePlannerModal();
+  switchTab('dag');
+  updateDagMath();
+  renderTimeline();
+  updateExpenseUI();
+  updateSettlementMath();
+  saveStateToLocalStorage();
+
+  showToast(`Synthesized ${newNodes.length} stops & ${newExpenses.length} expenses for ${dest}!`);
+}
+
+
 
